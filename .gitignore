@@ -1,0 +1,26 @@
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# Gradle
+.gradle/
+build/
+backend/.gradle/
+backend/build/
+
+# Spring Boot
+backend/src/main/resources/application.yml
+backend/src/main/resources/application-local.yml
+uploads/
+backend/uploads/
+
+# React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
