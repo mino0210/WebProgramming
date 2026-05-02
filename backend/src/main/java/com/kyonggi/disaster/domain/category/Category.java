@@ -1,4 +1,4 @@
-package com.kyonggi.disaster.domain.category.entity;
+package com.kyonggi.disaster.category;
 
 import jakarta.persistence.*;
 import lombok.*;

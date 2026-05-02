@@ -1,4 +1,4 @@
-package com.kyonggi.disaster.domain.category.repository;
+package com.kyonggi.disaster.category;
 
 import com.kyonggi.disaster.domain.category.entity.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
