@@ -1,3 +1,11 @@
-// TODO: 팀원 B 담당 — 회원가입 페이지
-function SignUpPage() { return <div>회원가입 (구현 예정)</div> }
+import SignUpForm from '../components/auth/SignUpForm'
+
+// 변경: style → className (layout.css의 .auth-page)
+function SignUpPage() {
+  return (
+    <div className="auth-page">
+      <SignUpForm />
+    </div>
+  )
+}
 export default SignUpPage

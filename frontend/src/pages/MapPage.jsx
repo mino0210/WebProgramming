@@ -28,11 +28,12 @@ function MapPage() {
     : pins
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    // 변경: style → className (layout.css의 .map-page / .map-area)
+    <div className="map-page">
       <Header />
       <AlertBanner alerts={alerts} />
       <CategoryFilter selected={selectedCategory} onChange={setSelectedCategory} />
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="map-area">
         <KakaoMap
           pins={filteredPins}
           onMapClick={(latLng) => { setClickedLatLng(latLng); setModalOpen(true) }}

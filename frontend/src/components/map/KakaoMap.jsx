@@ -32,7 +32,8 @@ function KakaoMap({ pins, onMapClick, onPinsLoaded }) {
     })
   }, [pins])
 
-  return <div ref={mapRef} style={{ flex: 1, height: '100%' }} />
+  // 변경: style → className (layout.css의 .kakao-map)
+  return <div ref={mapRef} className="kakao-map" />
 }
 
 export default KakaoMap
