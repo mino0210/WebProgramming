@@ -3,10 +3,13 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    global: 'globalThis',
+  },
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8080',   // Spring Boot 프록시
+      '/api': 'http://localhost:8080',
       '/ws':  { target: 'http://localhost:8080', ws: true }
     }
   }
