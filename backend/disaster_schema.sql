@@ -1,5 +1,6 @@
 -- 재난 안전 지도 DB 스키마
 -- MySQL 8.0 기준
+SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS disaster_db
     DEFAULT CHARACTER SET utf8mb4

@@ -1,111 +1,96 @@
-// TODO: 팀원 A 담당 — 제보 카드
 /**
- * ReportCard
+ * ReportCard - 초안 UI 반영
  * props:
  *  - report: { reportId, title, content, categoryName, sympathyCount, status, createdAt, imageUrls }
  */
 
 const CATEGORY_META = {
-    침수: { emoji: '🌊', color: '#3b82f6', bg: '#eff6ff' },
-    화재: { emoji: '🔥', color: '#ef4444', bg: '#fef2f2' },
-    교통: { emoji: '🚗', color: '#f59e0b', bg: '#fffbeb' },
-    낙석: { emoji: '🪨', color: '#6b7280', bg: '#f3f4f6' },
+  침수: { icon: '💧', color: '#3b82f6' },
+  화재: { icon: '🔥', color: '#ef4444' },
+  교통: { icon: '🚗', color: '#f59e0b' },
+  낙석: { icon: '⛰️', color: '#78716c' },
+  정전: { icon: '⚡', color: '#eab308' },
+  가스누출: { icon: '💨', color: '#22c55e' },
+}
+
+// 공감 수 → 위험도
+const getDangerLevel = (count) => {
+  if (!count || count < 2)  return { label: '낮음',    color: '#3b82f6', bg: '#eff6ff' }
+  if (count < 4)             return { label: '보통',    color: '#f59e0b', bg: '#fffbeb' }
+  if (count < 6)             return { label: '높음',    color: '#f97316', bg: '#fff7ed' }
+  return                            { label: '매우높음', color: '#ef4444', bg: '#fef2f2' }
+}
+
+const timeAgo = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const h = date.getHours().toString().padStart(2, '0')
+  const m = date.getMinutes().toString().padStart(2, '0')
+  return `${h}:${m}`
 }
 
 function ReportCard({ report }) {
-    const meta = CATEGORY_META[report.categoryName] || { emoji: '📌', color: '#8b5cf6', bg: '#f5f3ff' }
-    const isResolved = report.status === 'RESOLVED'
+  const meta    = CATEGORY_META[report.categoryName] || { icon: '📌', color: '#8b5cf6' }
+  const danger  = getDangerLevel(report.sympathyCount)
 
-    const timeAgo = (dateStr) => {
-        if (!dateStr) return ''
-        const diff = Date.now() - new Date(dateStr).getTime()
-        const m = Math.floor(diff / 60000)
-        if (m < 1)  return '방금 전'
-        if (m < 60) return `${m}분 전`
-        const h = Math.floor(m / 60)
-        if (h < 24) return `${h}시간 전`
-        return `${Math.floor(h / 24)}일 전`
-    }
+  return (
+    <div style={styles.card}>
+      {/* 아이콘 */}
+      <div style={{ ...styles.iconBox, color: meta.color }}>
+        {meta.icon}
+      </div>
 
-    return (
-        <div style={{ ...styles.card, opacity: isResolved ? 0.6 : 1 }}>
-
-            {/* 카테고리 뱃지 + 시간 */}
-            <div style={styles.topRow}>
-        <span style={{ ...styles.badge, color: meta.color, background: meta.bg }}>
-          {meta.emoji} {report.categoryName}
-        </span>
-                <span style={styles.time}>{timeAgo(report.createdAt)}</span>
-                {isResolved && <span style={styles.resolvedBadge}>✅ 해결됨</span>}
-            </div>
-
-            {/* 제목 */}
-            <div style={styles.title}>{report.title}</div>
-
-            {/* 내용 */}
-            <div style={styles.content}>{report.content}</div>
-
-            {/* 이미지 */}
-            {report.imageUrls?.length > 0 && (
-                <img
-                    src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}${report.imageUrls[0]}`}
-                    alt="제보 이미지"
-                    style={styles.image}
-                    onError={(e) => { e.target.style.display = 'none' }}
-                />
-            )}
-
-            {/* 공감 수 */}
-            <div style={styles.footer}>
-        <span style={styles.sympathyCount}>
-          ⚠️ {report.sympathyCount || 0}명이 위험해요
-        </span>
-            </div>
-
+      {/* 내용 */}
+      <div style={styles.body}>
+        <div style={styles.topRow}>
+          <span style={{ ...styles.category, color: meta.color }}>{report.categoryName}</span>
+          <span style={styles.time}>{timeAgo(report.createdAt)}</span>
         </div>
-    )
+        <div style={styles.location}>{report.title}</div>
+        <div style={styles.content}>{report.content}</div>
+      </div>
+
+      {/* 위험도 뱃지 */}
+      <div style={{ ...styles.dangerBadge, color: danger.color, background: danger.bg }}>
+        {danger.label}
+      </div>
+    </div>
+  )
 }
 
 const styles = {
-    card: {
-        background: '#fff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '14px 16px',
-        display: 'flex', flexDirection: 'column', gap: '7px',
-    },
-    topRow: {
-        display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
-    },
-    badge: {
-        fontSize: '11px', fontWeight: '700',
-        padding: '3px 9px', borderRadius: '20px',
-    },
-    time: { fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' },
-    resolvedBadge: {
-        fontSize: '11px', color: '#16a34a', background: '#f0fdf4',
-        padding: '2px 8px', borderRadius: '20px', fontWeight: '600',
-    },
-    title: {
-        fontSize: '14px', fontWeight: '700', color: '#1e293b', lineHeight: 1.4,
-    },
-    content: {
-        fontSize: '13px', color: '#64748b', lineHeight: 1.5,
-        display: '-webkit-box',
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-    },
-    image: {
-        width: '100%', borderRadius: '8px',
-        maxHeight: '140px', objectFit: 'cover', marginTop: '4px',
-    },
-    footer: {
-        display: 'flex', justifyContent: 'flex-end', marginTop: '4px',
-    },
-    sympathyCount: {
-        fontSize: '12px', color: '#ef4444', fontWeight: '600',
-    },
+  card: {
+    display: 'flex', alignItems: 'flex-start', gap: '10px',
+    padding: '12px 14px',
+    borderBottom: '1px solid #f1f5f9',
+    background: '#fff',
+    cursor: 'pointer',
+    transition: 'background 0.1s',
+  },
+  iconBox: {
+    fontSize: '22px', flexShrink: 0,
+    width: '36px', height: '36px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  body: { flex: 1, minWidth: 0 },
+  topRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' },
+  category: { fontSize: '12px', fontWeight: '700' },
+  time: { fontSize: '11px', color: '#94a3b8' },
+  location: {
+    fontSize: '13px', fontWeight: '600', color: '#1e293b',
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  },
+  content: {
+    fontSize: '12px', color: '#64748b', lineHeight: 1.4,
+    display: '-webkit-box', WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical', overflow: 'hidden',
+    marginTop: '2px',
+  },
+  dangerBadge: {
+    flexShrink: 0, fontSize: '11px', fontWeight: '700',
+    padding: '3px 8px', borderRadius: '6px',
+    alignSelf: 'center',
+  },
 }
 
 export default ReportCard

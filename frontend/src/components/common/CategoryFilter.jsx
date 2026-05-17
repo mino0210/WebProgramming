@@ -1,67 +1,73 @@
-// TODO: 팀원 A 담당
 /**
- * CategoryFilter
+ * CategoryFilter - 초안 UI 반영
  * props:
- *  - categories: [{ id, name }]
- *  - selected: 현재 선택된 categoryName (null이면 전체)
+ *  - categories: [{ id, name }]  ← 백엔드 연결 후 사용
+ *  - selected: 선택된 categoryName (null이면 전체)
  *  - onChange: (categoryName | null) => void
  */
 
-const CATEGORY_EMOJI = {
-  침수: '🌊',
-  화재: '🔥',
-  교통: '🚗',
-  낙석: '🪨',
-};
+const CATEGORIES = [
+  { name: '전체',   icon: '⊞',  color: '#1e40af', bg: '#1e40af' },
+  { name: '침수',   icon: '💧', color: '#3b82f6', bg: '#eff6ff' },
+  { name: '화재',   icon: '🔥', color: '#ef4444', bg: '#fef2f2' },
+  { name: '교통',   icon: '🚗', color: '#f59e0b', bg: '#fffbeb' },
+  { name: '낙석',   icon: '⛰️', color: '#78716c', bg: '#f5f5f4' },
+  { name: '기타',   icon: '···', color: '#6b7280', bg: '#f3f4f6' },
+]
 
-function CategoryFilter({ categories = [], selected, onChange }) {
+function CategoryFilter({ selected, onChange }) {
   return (
-      <div style={styles.wrapper}>
-        <button
-            style={{ ...styles.btn, ...(selected === null ? styles.btnActive : {}) }}
-            onClick={() => onChange(null)}
-        >
-          🗺️ 전체
-        </button>
-        {categories.map((cat) => (
+    <div style={styles.wrapper}>
+      <div style={styles.left}>
+        {CATEGORIES.map((cat) => {
+          const isActive = cat.name === '전체' ? selected === null : selected === cat.name
+          const activeColor = cat.name === '전체' ? '#1e40af' : cat.color
+          return (
             <button
-                key={cat.id}
-                style={{ ...styles.btn, ...(selected === cat.name ? styles.btnActive : {}) }}
-                onClick={() => onChange(cat.name)}
+              key={cat.name}
+              style={{
+                ...styles.btn,
+                background: isActive ? activeColor : '#fff',
+                color: isActive ? '#fff' : '#374151',
+                borderColor: isActive ? activeColor : '#d1d5db',
+                fontWeight: isActive ? '700' : '500',
+              }}
+              onClick={() => onChange(cat.name === '전체' ? null : cat.name)}
             >
-              {CATEGORY_EMOJI[cat.name] || '📌'} {cat.name}
+              <span style={{ fontSize: '14px' }}>{cat.icon}</span>
+              {cat.name}
             </button>
-        ))}
+          )
+        })}
       </div>
-  );
+      <div style={styles.right}>
+        <label style={styles.checkLabel}>
+          <input type="checkbox" style={{ marginRight: '6px' }} />
+          위험 지역만 보기
+        </label>
+        <span style={styles.infoIcon}>ℹ️</span>
+      </div>
+    </div>
+  )
 }
 
 const styles = {
   wrapper: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-    padding: '10px 14px',
-    background: '#ffffff',
-    borderBottom: '1px solid #e2e8f0',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '8px 16px', background: '#fff',
+    borderBottom: '1px solid #e2e8f0', flexShrink: 0,
   },
+  left: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   btn: {
-    padding: '6px 14px',
-    borderRadius: '20px',
-    border: '1.5px solid #cbd5e1',
-    background: '#f8fafc',
-    color: '#475569',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
+    display: 'flex', alignItems: 'center', gap: '5px',
+    padding: '6px 14px', borderRadius: '20px',
+    border: '1.5px solid #d1d5db',
+    fontSize: '13px', cursor: 'pointer',
+    transition: 'all 0.15s', whiteSpace: 'nowrap',
   },
-  btnActive: {
-    background: '#1e40af',
-    borderColor: '#1e40af',
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-};
+  right: { display: 'flex', alignItems: 'center', gap: '6px' },
+  checkLabel: { fontSize: '13px', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center' },
+  infoIcon: { fontSize: '14px', cursor: 'pointer' },
+}
 
-export default CategoryFilter;
+export default CategoryFilter
