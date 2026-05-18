@@ -38,12 +38,19 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
 
     try {
       const formData = new FormData()
-      formData.append('title', title)
-      formData.append('content', content)
-      formData.append('categoryId', categoryId)
-      formData.append('latitude', latLng.lat)
-      formData.append('longitude', latLng.lng)
-      if (image) formData.append('image', image)
+
+// 백엔드가 'data' 파트로 JSON을 받음
+      const data = {
+        title,
+        content,
+        categoryId: Number(categoryId),
+        latitude: latLng.lat,
+        longitude: latLng.lng,
+      }
+      formData.append('data', new Blob([JSON.stringify(data)], { type: 'application/json' }))
+
+// 이미지는 'images' 파트로 전송
+      if (image) formData.append('images', image)
 
       const res = await createReport(formData, memberId)
       onSubmitted?.(res.data?.data || res.data)
