@@ -10,3 +10,4 @@ export const resolveReport = (reportId, memberId) =>
   api.patch(`/api/reports/${reportId}/resolve?memberId=${memberId}`)
 export const getMyReports  = (memberId) =>
   api.get(`/api/reports/my?memberId=${memberId}`)
+export const getCategories = () => api.get('/api/categories')
