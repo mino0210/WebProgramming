@@ -1,22 +1,31 @@
 import { useEffect, useRef } from 'react'
 import { getReports } from '../../api/reportApi'
 
-// TODO: 팀원 A 담당
 function KakaoMap({ pins, onMapClick, onPinsLoaded }) {
   const mapRef  = useRef(null)
   const mapObj  = useRef(null)
   const markers = useRef({})
 
   useEffect(() => {
-    const { kakao } = window
-    mapObj.current = new kakao.maps.Map(mapRef.current, {
-      center: new kakao.maps.LatLng(37.3, 127.0),
-      level: 7,
-    })
-    kakao.maps.event.addListener(mapObj.current, 'click', (e) => {
-      onMapClick?.({ lat: e.latLng.getLat(), lng: e.latLng.getLng() })
-    })
-    getReports().then((res) => onPinsLoaded?.(res.data))
+    const initMap = () => {
+      if (!window.kakao || !window.kakao.maps) {
+        setTimeout(initMap, 300)
+        return
+      }
+      const { kakao } = window
+      mapObj.current = new kakao.maps.Map(mapRef.current, {
+        center: new kakao.maps.LatLng(37.3, 127.0),
+        level: 7,
+      })
+      setTimeout(() => {
+        mapObj.current.relayout()
+      }, 100)
+      kakao.maps.event.addListener(mapObj.current, 'click', (e) => {
+        onMapClick?.({ lat: e.latLng.getLat(), lng: e.latLng.getLng() })
+      })
+      getReports().then((res) => onPinsLoaded?.(res.data))
+    }
+    initMap()
   }, [])
 
   useEffect(() => {
@@ -32,8 +41,7 @@ function KakaoMap({ pins, onMapClick, onPinsLoaded }) {
     })
   }, [pins])
 
-  // 변경: style → className (layout.css의 .kakao-map)
-  return <div ref={mapRef} className="kakao-map" />
+  return <div ref={mapRef} className="kakao-map" style={{ width: '100%', height: '600px', display: 'block' }} />
 }
 
 export default KakaoMap
