@@ -19,7 +19,11 @@ function MapPage() {
   useWebSocket({
     onNewPin:   (pin)  => setPins((prev) => [pin, ...prev]),
     onSympathy: (data) => setPins((prev) =>
-        prev.map((p) => p.reportId === data.reportId ? { ...p, sympathyCount: data.count } : p)
+        prev.map((p) =>
+            (p.reportId ?? p.id) === data.reportId
+                ? { ...p, sympathyCount: data.count }
+                : p
+        )
     ),
     onAlert: (data) => setAlerts((prev) => [data, ...prev]),
   })
@@ -41,6 +45,7 @@ function MapPage() {
   const timeStr = `${pad(lastUpdated.getHours())}:${pad(lastUpdated.getMinutes())}`
 
   return (
+
       <div style={styles.page}>
         <Header />
         <AlertBanner alerts={alerts} />

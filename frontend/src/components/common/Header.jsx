@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 
 function Header() {
+
   const navigate = useNavigate()
   const nickname = localStorage.getItem('nickname') || null
 
@@ -43,6 +44,10 @@ function Header() {
         </div>
       </header>
   )
+
+  // 변경: style → className (layout.css의 .header)
+  return <header className="header">재난 안전 지도</header>
+
 }
 
 const styles = {

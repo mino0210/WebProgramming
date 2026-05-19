@@ -1,3 +1,11 @@
-// TODO: 팀원 B 담당 — 로그인 페이지
-function LoginPage() { return <div>로그인 (구현 예정)</div> }
+import LoginForm from '../components/auth/LoginForm'
+
+// 변경: style → className (layout.css의 .auth-page)
+function LoginPage() {
+  return (
+    <div className="auth-page">
+      <LoginForm />
+    </div>
+  )
+}
 export default LoginPage
