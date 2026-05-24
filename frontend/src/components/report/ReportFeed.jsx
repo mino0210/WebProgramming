@@ -42,19 +42,31 @@ function ReportFeed({ pins = [], onPinsUpdate, onResolved, selectedPin, onPinSel
 
   return (
       <div style={styles.wrapper}>
+
         {/* 상세 패널 */}
         {selected && (
             <div style={styles.detail}>
               <div style={styles.detailHeader}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                   <span style={{ ...styles.detailBadge, background: color }}>{selected.categoryName}</span>
-                  {selected.status === 'RESOLVED' && <span style={styles.resolvedChip}>✅ 해결완료</span>}
+                  {selected.status === 'RESOLVED' && (
+                      <span style={styles.resolvedChip}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  해결완료
+                </span>
+                  )}
                 </div>
                 <button style={styles.closeBtn} onClick={() => setSelected(null)}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                  </svg>
                 </button>
               </div>
+
               <div style={styles.detailTitle}>{selected.title}</div>
+
               <div style={styles.metaGrid}>
                 <span style={styles.metaLabel}>제보 시간</span>
                 <span style={styles.metaValue}>{selected.createdAt ? new Date(selected.createdAt).toLocaleString('ko-KR') : '-'}</span>
@@ -65,23 +77,45 @@ function ReportFeed({ pins = [], onPinsUpdate, onResolved, selectedPin, onPinSel
                 <span style={styles.metaLabel}>제보자</span>
                 <span style={styles.metaValue}>{selected.nickname || '시민 제보'}</span>
               </div>
+
               {selected.imageUrls?.length > 0 && (
                   <div>
                     <div style={styles.sectionLabel}>첨부 사진</div>
                     <div style={styles.imageGrid}>
                       {selected.imageUrls.map((url, i) => (
-                          <img key={i} src={url.startsWith('http') ? url : `${apiBase}${url}`} alt="제보" style={styles.detailImage} onError={(e) => { e.target.style.display = 'none' }} />
+                          <img key={i}
+                               src={url.startsWith('http') ? url : `${apiBase}${url}`}
+                               alt="제보" style={styles.detailImage}
+                               onError={(e) => { e.target.style.display = 'none' }}
+                          />
                       ))}
                     </div>
                   </div>
               )}
+
               <div style={styles.actionRow}>
-                <SympathyButton reportId={selected.reportId ?? selected.id} memberId={memberId} count={selected.status === 'NEW' ? 0 : (selected.sympathyCount || 0)} onChanged={handleSympathyChanged} />
+                <SympathyButton
+                    reportId={selected.reportId ?? selected.id}
+                    memberId={memberId}
+                    count={selected.status === 'NEW' ? 0 : (selected.sympathyCount || 0)}
+                    onChanged={handleSympathyChanged}
+                />
                 {selected.nickname === nickname && selected.status !== 'RESOLVED' && (
-                    <button style={styles.resolveBtn} onClick={() => handleResolve(selected.reportId ?? selected.id)}>✅ 해결 완료</button>
+                    <button style={styles.resolveBtn} onClick={() => handleResolve(selected.reportId ?? selected.id)}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      해결 완료
+                    </button>
                 )}
               </div>
-              <div style={styles.dangerCount}>⚠️ {selected.sympathyCount || 0}명이 위험해요</div>
+
+              <div style={styles.dangerCount}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                </svg>
+                {selected.sympathyCount || 0}명이 위험해요
+              </div>
             </div>
         )}
 
@@ -95,7 +129,6 @@ function ReportFeed({ pins = [], onPinsUpdate, onResolved, selectedPin, onPinSel
           <div style={styles.list}>
             {pins.length === 0 ? (
                 <div style={styles.empty}>
-                  {/* 이모지 대신 지도 모양 SVG */}
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '12px' }}>
                     <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/>
                     <path d="M8 2v16M16 6v16"/>
@@ -107,7 +140,15 @@ function ReportFeed({ pins = [], onPinsUpdate, onResolved, selectedPin, onPinSel
                 pins.map((report) => {
                   const isSelected = selected?.id === report.id
                   return (
-                      <div key={report.id} onClick={(e) => { e.stopPropagation(); setSelected(isSelected ? null : report) }} style={{ cursor: 'pointer', background: isSelected ? '#eff6ff' : '#fff', borderLeft: isSelected ? '3px solid #2563eb' : '3px solid transparent' }}>
+                      <div key={report.id}
+                           onClick={(e) => { e.stopPropagation(); setSelected(isSelected ? null : report) }}
+                           style={{
+                             cursor: 'pointer',
+                             background: isSelected ? '#eff6ff' : '#fff',
+                             borderLeft: isSelected ? '3px solid #2563eb' : '3px solid transparent',
+                             transition: 'background 0.12s',
+                           }}
+                      >
                         <ReportCard report={report} />
                       </div>
                   )
@@ -118,12 +159,13 @@ function ReportFeed({ pins = [], onPinsUpdate, onResolved, selectedPin, onPinSel
           <div style={styles.alertRow}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
               </svg>
               <span style={styles.alertText}>새로운 제보 알림 받기</span>
             </div>
-            <div style={{ ...styles.toggle, background: notifyOn ? '#2563eb' : '#d1d5db' }} onClick={() => setNotifyOn(v => !v)}>
+            <div style={{ ...styles.toggle, background: notifyOn ? '#2563eb' : '#d1d5db' }}
+                 onClick={() => setNotifyOn(v => !v)}>
               <div style={{ ...styles.toggleKnob, left: notifyOn ? '23px' : '3px' }} />
             </div>
           </div>
@@ -134,10 +176,20 @@ function ReportFeed({ pins = [], onPinsUpdate, onResolved, selectedPin, onPinSel
 
 const styles = {
   wrapper: { display: 'flex', height: '100%', position: 'relative' },
-  detail: { position: 'absolute', right: '320px', top: 0, bottom: 0, width: '300px', background: '#fff', borderLeft: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', overflowY: 'auto', boxShadow: '-4px 0 16px rgba(0,0,0,0.06)', zIndex: 100 },
+  detail: {
+    position: 'absolute', right: '320px', top: 0, bottom: 0, width: '300px',
+    background: '#fff', borderLeft: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb',
+    display: 'flex', flexDirection: 'column', gap: '12px',
+    padding: '16px', overflowY: 'auto',
+    boxShadow: '-4px 0 16px rgba(0,0,0,0.06)', zIndex: 100,
+  },
   detailHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   detailBadge: { color: '#fff', fontSize: '11px', fontWeight: '700', padding: '3px 10px', borderRadius: '9999px' },
-  resolvedChip: { fontSize: '11px', fontWeight: '600', color: '#15803d', background: '#dcfce7', padding: '3px 8px', borderRadius: '9999px' },
+  resolvedChip: {
+    display: 'flex', alignItems: 'center', gap: '4px',
+    fontSize: '11px', fontWeight: '600', color: '#15803d',
+    background: '#dcfce7', padding: '3px 8px', borderRadius: '9999px',
+  },
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '4px', borderRadius: '6px', display: 'flex', alignItems: 'center' },
   detailTitle: { fontSize: '16px', fontWeight: '700', color: '#111827', lineHeight: 1.4 },
   metaGrid: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '7px 14px', background: '#f9fafb', borderRadius: '10px', padding: '12px' },
@@ -146,9 +198,33 @@ const styles = {
   sectionLabel: { fontSize: '11px', color: '#9ca3af', fontWeight: '600', marginBottom: '6px', letterSpacing: '0.3px' },
   imageGrid: { display: 'flex', gap: '8px' },
   detailImage: { width: 'calc(50% - 4px)', borderRadius: '8px', aspectRatio: '4/3', objectFit: 'cover' },
-  actionRow: { display: 'flex', gap: '8px', paddingTop: '10px', borderTop: '1px solid #f3f4f6', flexWrap: 'wrap' },
-  resolveBtn: { flex: 1, padding: '8px 12px', border: 'none', borderRadius: '8px', background: '#22c55e', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer' },
-  dangerCount: { fontSize: '12px', color: '#ef4444', fontWeight: '600', paddingTop: '8px', borderTop: '1px solid #f3f4f6' },
+  actionRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: '10px',
+    borderTop: '1px solid #f3f4f6',
+  },
+  resolveBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '0 16px',
+    height: '34px',
+    border: 'none',
+    borderRadius: '8px',
+    background: '#22c55e',
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+  },
+  dangerCount: {
+    display: 'flex', alignItems: 'center', gap: '5px',
+    fontSize: '12px', color: '#ef4444', fontWeight: '600',
+    paddingTop: '8px', borderTop: '1px solid #f3f4f6',
+  },
   feed: { width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fff', borderLeft: '1px solid #e5e7eb' },
   feedHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px 12px', borderBottom: '1px solid #f3f4f6', flexShrink: 0 },
   feedTitle: { fontSize: '14px', fontWeight: '700', color: '#111827' },
@@ -156,9 +232,9 @@ const styles = {
   list: { flex: 1, overflowY: 'auto' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '180px', textAlign: 'center', padding: '20px' },
   alertRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid #f3f4f6', flexShrink: 0, background: '#f9fafb' },
+  alertText: { fontSize: '13px', color: '#374151', fontWeight: '500' },
   toggle: { width: '44px', height: '24px', borderRadius: '12px', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' },
   toggleKnob: { position: 'absolute', top: '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' },
-  alertText: { fontSize: '13px', color: '#374151', fontWeight: '500' },
 }
 
 export default ReportFeed
