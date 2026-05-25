@@ -10,12 +10,13 @@ export function useAuth() {
 
   const handleLogin = async (data) => {
     const res = await login(data)
-    localStorage.setItem('member', JSON.stringify(res.data))
+    const memberData = res?.data?.data ?? res?.data ?? res
+    localStorage.setItem('member', JSON.stringify(memberData))
     // Header.jsx / ReportModal.jsx / SympathyButton 등이 사용하는 개별 키도 함께 저장
-    if (res.data?.id != null)       localStorage.setItem('memberId', String(res.data.id))
-    if (res.data?.nickname != null) localStorage.setItem('nickname', res.data.nickname)
-    setMember(res.data)
-    return res.data
+    if (memberData?.id != null)       localStorage.setItem('memberId', String(memberData.id))
+    if (memberData?.nickname != null) localStorage.setItem('nickname', memberData.nickname)
+    setMember(memberData)
+    return memberData
   }
 
   const handleSignUp = async (data) => signUp(data)

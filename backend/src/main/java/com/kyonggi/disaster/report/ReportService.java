@@ -14,8 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -49,10 +52,11 @@ public class ReportService {
 
         if (images != null) {
             for (MultipartFile file : images) {
+                if (file == null || file.isEmpty()) continue;
                 String path = saveImage(file);
                 report.getImages().add(ReportImage.builder()
                         .report(report).filePath(path)
-                        .originalName(file.getOriginalFilename()).build());
+                        .originalName(safeOriginalName(file.getOriginalFilename())).build());
             }
         }
 
@@ -62,6 +66,13 @@ public class ReportService {
         messagingTemplate.convertAndSend("/topic/pins", PinMessage.from(saved));
 
         return new ReportResponse(saved, 0);
+    }
+
+    public List<ReportResponse> getAll() {
+        return reportRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(r -> new ReportResponse(r, sympathyRepository.countByReportId(r.getId())))
+                .collect(Collectors.toList());
     }
 
     public List<ReportResponse> getActive() {
@@ -97,18 +108,54 @@ public class ReportService {
                 .collect(Collectors.toList());
     }
 
+    private String safeOriginalName(String originalName) {
+        if (originalName == null || originalName.trim().isEmpty()) return "report-image";
+        String normalized = Paths.get(originalName).getFileName().toString();
+        return normalized.length() > 240 ? normalized.substring(normalized.length() - 240) : normalized;
+    }
+
     private String saveImage(MultipartFile file) {
-        String ext  = getExt(file.getOriginalFilename());
+        validateImage(file);
+
+        String ext  = getExt(file.getOriginalFilename(), file.getContentType());
         String name = UUID.randomUUID() + ext;
-        File   dir  = new File(uploadDir);
-        if (!dir.exists()) dir.mkdirs();
-        try { file.transferTo(new File(uploadDir + name)); }
-        catch (IOException e) { throw new RuntimeException("이미지 저장 실패", e); }
+
+        try {
+            Path dirPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Files.createDirectories(dirPath);
+
+            Path filePath = dirPath.resolve(name).normalize();
+            if (!filePath.startsWith(dirPath)) {
+                throw CustomException.badRequest("잘못된 파일 경로입니다.");
+            }
+
+            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+        }
+        catch (IOException e) {
+            throw new RuntimeException("이미지 저장 실패", e);
+        }
         return name;
     }
 
-    private String getExt(String filename) {
-        if (filename == null || !filename.contains(".")) return ".jpg";
-        return filename.substring(filename.lastIndexOf("."));
+    private void validateImage(MultipartFile file) {
+        if (file == null || file.isEmpty()) return;
+
+        String contentType = file.getContentType();
+        if (contentType != null && !contentType.toLowerCase().startsWith("image/")) {
+            throw CustomException.badRequest("이미지 파일만 업로드할 수 있습니다.");
+        }
+    }
+
+    private String getExt(String filename, String contentType) {
+        if (filename != null && filename.contains(".")) {
+            String ext = filename.substring(filename.lastIndexOf(".")).toLowerCase();
+            if (ext.matches("\\.(jpg|jpeg|png|gif|webp)")) return ext;
+        }
+        if (contentType == null) return ".jpg";
+        String lower = contentType.toLowerCase();
+        if (lower.contains("png")) return ".png";
+        if (lower.contains("gif")) return ".gif";
+        if (lower.contains("webp")) return ".webp";
+        return ".jpg";
     }
 }

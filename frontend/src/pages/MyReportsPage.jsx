@@ -1,288 +1,504 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMyReports, resolveReport } from '../api/reportApi'
+import Header from '../components/common/Header'
+import { getAllReports, resolveReport } from '../api/reportApi'
+
+const DEFAULT_CATEGORIES = ['전체', '침수', '화재', '교통', '낙석', '정전', '가스누출', '기타']
 
 const CATEGORY_META = {
-    침수:    { color: '#3b82f6', bg: '#eff6ff',
-        icon: (c) => <svg width="15" height="15" viewBox="0 0 24 24" fill={c}><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2C20 10.48 17.33 6.55 12 2z"/></svg> },
-    화재:    { color: '#ef4444', bg: '#fef2f2',
-        icon: (c) => <svg width="15" height="15" viewBox="0 0 24 24" fill={c}><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg> },
-    교통:    { color: '#f59e0b', bg: '#fffbeb',
-        icon: (c) => <svg width="15" height="15" viewBox="0 0 24 24" fill={c}><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg> },
-    낙석:    { color: '#78716c', bg: '#f5f5f4',
-        icon: (c) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 20h20L12 2z"/><circle cx="15" cy="11" r="1.5" fill={c}/><circle cx="10" cy="16" r="1"/></svg> },
-    정전:    { color: '#eab308', bg: '#fefce8',
-        icon: (c) => <svg width="15" height="15" viewBox="0 0 24 24" fill={c}><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg> },
-    가스누출: { color: '#22c55e', bg: '#f0fdf4',
-        icon: (c) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18h18M8 18V9h8v9"/><circle cx="12" cy="6" r="1.5"/><circle cx="16" cy="4" r="1"/><circle cx="8" cy="4" r="1"/></svg> },
+  침수: {
+    label: '침수', color: '#3b82f6', bg: '#eff6ff', iconText: '💧',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2C20 10.48 17.33 6.55 12 2z"/></svg>,
+  },
+  화재: {
+    label: '화재', color: '#ef4444', bg: '#fef2f2', iconText: '🔥',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>,
+  },
+  교통: {
+    label: '교통', color: '#f59e0b', bg: '#fffbeb', iconText: '🚗',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>,
+  },
+  낙석: {
+    label: '낙석', color: '#78716c', bg: '#f5f5f4', iconText: '⛰️',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 20h20L12 2z"/><circle cx="15" cy="11" r="1.5" fill={c}/><circle cx="10" cy="16" r="1" fill={c}/></svg>,
+  },
+  정전: {
+    label: '정전', color: '#eab308', bg: '#fefce8', iconText: '⚡',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>,
+  },
+  가스누출: {
+    label: '가스누출', color: '#22c55e', bg: '#f0fdf4', iconText: '☁️',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18h18M8 18V9h8v9"/><circle cx="12" cy="6" r="1.5"/><circle cx="16" cy="4" r="1"/><circle cx="8" cy="4" r="1"/></svg>,
+  },
+  기타: {
+    label: '기타', color: '#64748b', bg: '#f1f5f9', iconText: '●',
+    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>,
+  },
 }
 
-const CheckIcon = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
+const statusMeta = {
+  all: { label: '전체', color: '#2563eb', bg: '#eff6ff' },
+  active: { label: '진행 중', color: '#ef4444', bg: '#fef2f2' },
+  resolved: { label: '해결 완료', color: '#16a34a', bg: '#f0fdf4' },
+}
+
+function IconDocument() {
+  return (
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 13h8M8 17h6" />
     </svg>
-)
+  )
+}
+
+function IconClock() {
+  return (
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  )
+}
+
+function IconCheck() {
+  return (
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12.5l2.5 2.5L16 9" />
+    </svg>
+  )
+}
+
+function SmallCheck() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function formatDate(value) {
+  if (!value) return '등록 시간 없음'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '등록 시간 없음'
+  return date.toLocaleDateString('ko-KR', {
+    month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function getReportId(report) {
+  return report.reportId ?? report.id
+}
+
+function normalizeCategory(categoryName) {
+  return CATEGORY_META[categoryName] ? categoryName : '기타'
+}
+
+function isResolvedReport(report) {
+  return report.status === 'RESOLVED' || report.resolved === true
+}
+
+function getImageUrl(report, apiBase) {
+  const first = report.imageUrls?.[0] || report.imageUrl || report.imagePath
+  if (!first) return null
+  if (String(first).startsWith('http')) return first
+  return `${apiBase}${String(first).startsWith('/') ? first : `/${first}`}`
+}
+
+function SummaryCard({ type, icon, label, value, description }) {
+  return (
+    <section className={`reports-summary-card reports-summary-card--${type}`}>
+      <div className="reports-summary-icon">{icon}</div>
+      <div>
+        <p className="reports-summary-label">{label}</p>
+        <strong className="reports-summary-value">{value}</strong>
+        <span className="reports-summary-desc">{description}</span>
+      </div>
+    </section>
+  )
+}
 
 function MyReportsPage() {
-    const navigate  = useNavigate()
-    const memberId  = localStorage.getItem('memberId')
-    const nickname  = localStorage.getItem('nickname') || '사용자'
+  const navigate = useNavigate()
+  const memberId = localStorage.getItem('memberId')
+  const nickname = localStorage.getItem('nickname') || '사용자'
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
-    const [reports, setReports]     = useState([])
-    const [loading, setLoading]     = useState(true)
-    const [resolving, setResolving] = useState(null)
+  const [reports, setReports] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [resolving, setResolving] = useState(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('전체')
+  const [sortType, setSortType] = useState('latest')
 
-    useEffect(() => {
-        if (!memberId) { navigate('/login'); return }
-        getMyReports(memberId)
-            .then((res) => setReports(res.data?.data || res.data || []))
-            .catch(() => {})
-            .finally(() => setLoading(false))
-    }, [memberId])
-
-    const handleResolve = async (reportId) => {
-        if (!window.confirm('이 제보를 해결 완료 처리하시겠습니까?')) return
-        setResolving(reportId)
-        try {
-            await resolveReport(reportId, memberId)
-            setReports((prev) =>
-                prev.map((r) => r.id === reportId ? { ...r, status: 'RESOLVED' } : r)
-            )
-        } catch { alert('처리 중 오류가 발생했습니다.') }
-        finally { setResolving(null) }
+  useEffect(() => {
+    if (!memberId) {
+      navigate('/login')
+      return
     }
 
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-    const activeReports   = reports.filter((r) => r.status === 'ACTIVE')
-    const resolvedReports = reports.filter((r) => r.status === 'RESOLVED')
+    setLoading(true)
+    getAllReports()
+      .then((res) => {
+        const list = res.data?.data ?? res.data ?? []
+        setReports(Array.isArray(list) ? list : [])
+      })
+      .catch((error) => {
+        console.error('제보 내역 조회 실패:', error)
+        setReports([])
+      })
+      .finally(() => setLoading(false))
+  }, [memberId, navigate])
+
+  const activeReports = useMemo(() => reports.filter((report) => !isResolvedReport(report)), [reports])
+  const resolvedReports = useMemo(() => reports.filter(isResolvedReport), [reports])
+
+  const categoryList = useMemo(() => {
+    const used = reports.map((report) => normalizeCategory(report.categoryName))
+    const merged = [...new Set([...DEFAULT_CATEGORIES, ...used])]
+    return merged.filter((item) => item === '전체' || item === '기타' || used.includes(item) || DEFAULT_CATEGORIES.includes(item))
+  }, [reports])
+
+  const filteredReports = useMemo(() => {
+    const keyword = search.trim().toLowerCase()
+    return reports
+      .filter((report) => {
+        if (statusFilter === 'active' && isResolvedReport(report)) return false
+        if (statusFilter === 'resolved' && !isResolvedReport(report)) return false
+        if (categoryFilter !== '전체' && normalizeCategory(report.categoryName) !== categoryFilter) return false
+
+        if (!keyword) return true
+        return [report.title, report.content, report.categoryName, report.address, report.locationName]
+          .filter(Boolean)
+          .some((text) => String(text).toLowerCase().includes(keyword))
+      })
+      .sort((a, b) => {
+        if (sortType === 'sympathy') return (b.sympathyCount || 0) - (a.sympathyCount || 0)
+        if (sortType === 'category') return String(a.categoryName || '').localeCompare(String(b.categoryName || ''), 'ko')
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return sortType === 'oldest' ? aTime - bTime : bTime - aTime
+      })
+  }, [reports, search, statusFilter, categoryFilter, sortType])
+
+  const categoryCounts = useMemo(() => {
+    return reports.reduce((acc, report) => {
+      const name = normalizeCategory(report.categoryName)
+      acc[name] = (acc[name] || 0) + 1
+      return acc
+    }, {})
+  }, [reports])
+
+  const recentReports = useMemo(() => {
+    return [...reports]
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .slice(0, 3)
+  }, [reports])
+
+  const mainCategoryStats = useMemo(() => {
+    const candidates = Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+    return candidates.length > 0 ? candidates : [['기타', 0]]
+  }, [categoryCounts])
+
+  const donutStyle = useMemo(() => {
+    if (reports.length === 0) return { background: 'conic-gradient(#e5e7eb 0 360deg)' }
+    let cursor = 0
+    const segments = mainCategoryStats.map(([name, count]) => {
+      const meta = CATEGORY_META[name] || CATEGORY_META.기타
+      const start = cursor
+      const end = cursor + (count / reports.length) * 360
+      cursor = end
+      return `${meta.color} ${start}deg ${end}deg`
+    })
+    return { background: `conic-gradient(${segments.join(', ')}, #e5e7eb ${cursor}deg 360deg)` }
+  }, [mainCategoryStats, reports.length])
+
+  const resetFilters = () => {
+    setSearch('')
+    setStatusFilter('all')
+    setCategoryFilter('전체')
+    setSortType('latest')
+  }
+
+  const handleResolve = async (reportId) => {
+    if (!reportId) return
+    if (!window.confirm('이 제보를 해결 완료 처리하시겠습니까?')) return
+    setResolving(reportId)
+    try {
+      await resolveReport(reportId, memberId)
+      setReports((prev) => prev.map((report) => (
+        getReportId(report) === reportId ? { ...report, status: 'RESOLVED' } : report
+      )))
+    } catch (error) {
+      console.error('제보 해결 처리 실패:', error)
+      alert('처리 중 오류가 발생했습니다.')
+    } finally {
+      setResolving(null)
+    }
+  }
+
+  const renderReportCard = (report) => {
+    const categoryName = normalizeCategory(report.categoryName)
+    const meta = CATEGORY_META[categoryName] || CATEGORY_META.기타
+    const reportId = getReportId(report)
+    const isResolved = isResolvedReport(report)
+    const imageUrl = getImageUrl(report, apiBase)
+    const locationText = report.address || report.locationName || report.region || '위치 정보 없음'
 
     return (
-        <div style={styles.page}>
-
-            {/* 헤더 */}
-            <header style={styles.header}>
-                <button style={styles.backBtn} onClick={() => navigate('/')}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M19 12H5M12 5l-7 7 7 7"/>
-                    </svg>
-                    지도로
-                </button>
-                <span style={styles.headerTitle}>제보 내역</span>
-                <span style={styles.nickname}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-                    {nickname}
-        </span>
-            </header>
-
-            {/* 통계 */}
-            <div style={styles.statsRow}>
-                <div style={styles.statBox}>
-                    <div style={styles.statNum}>{reports.length}</div>
-                    <div style={styles.statLabel}>전체 제보</div>
-                </div>
-                <div style={styles.statDivider} />
-                <div style={styles.statBox}>
-                    <div style={{ ...styles.statNum, color: '#ef4444' }}>{activeReports.length}</div>
-                    <div style={styles.statLabel}>진행 중</div>
-                </div>
-                <div style={styles.statDivider} />
-                <div style={styles.statBox}>
-                    <div style={{ ...styles.statNum, color: '#22c55e' }}>{resolvedReports.length}</div>
-                    <div style={styles.statLabel}>해결 완료</div>
-                </div>
+      <article key={reportId} className={`reports-history-card ${isResolved ? 'is-resolved' : ''}`}>
+        <div className="reports-history-thumb">
+          {imageUrl ? (
+            <img src={imageUrl} alt="제보 이미지" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+          ) : (
+            <div className="reports-history-empty-thumb">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <circle cx="8" cy="9" r="1.6" />
+                <path d="M21 16l-5.5-5.5L7 19" />
+              </svg>
             </div>
-
-            {/* 목록 */}
-            <div style={styles.content}>
-                {loading ? (
-                    <div style={styles.empty}>
-                        <div style={{ color: '#9ca3af', fontSize: '14px' }}>불러오는 중...</div>
-                    </div>
-                ) : reports.length === 0 ? (
-                    <div style={styles.empty}>
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                            <circle cx="12" cy="10" r="3"/>
-                        </svg>
-                        <div style={{ fontWeight: '700', fontSize: '15px', color: '#111827', marginTop: '16px' }}>
-                            아직 등록한 제보가 없어요
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#9ca3af', marginTop: '6px' }}>
-                            지도를 클릭해 첫 제보를 등록해보세요!
-                        </div>
-                        <button style={styles.goMapBtn} onClick={() => navigate('/')}>지도로 이동</button>
-                    </div>
-                ) : (
-                    <div style={styles.list}>
-                        {reports.map((report) => {
-                            const meta = CATEGORY_META[report.categoryName] || { color: '#8b5cf6', bg: '#f5f3ff', icon: () => null }
-                            const isResolved = report.status === 'RESOLVED'
-                            const date = report.createdAt
-                                ? new Date(report.createdAt).toLocaleDateString('ko-KR', {
-                                    month: 'long', day: 'numeric',
-                                    hour: '2-digit', minute: '2-digit',
-                                })
-                                : ''
-
-                            return (
-                                <div key={report.id} style={{ ...styles.card, opacity: isResolved ? 0.65 : 1 }}>
-
-                                    {/* 카드 헤더 */}
-                                    <div style={styles.cardHeader}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ ...styles.iconBox, background: meta.bg }}>
-                                                {meta.icon(meta.color)}
-                                            </div>
-                                            <span style={{ ...styles.categoryText, color: meta.color }}>
-                        {report.categoryName}
-                      </span>
-                                        </div>
-                                        <span style={{
-                                            ...styles.statusBadge,
-                                            background: isResolved ? '#f0fdf4' : '#fef2f2',
-                                            color: isResolved ? '#16a34a' : '#ef4444',
-                                        }}>
-                      {isResolved && <CheckIcon />}
-                                            {isResolved ? '해결됨' : '진행 중'}
-                    </span>
-                                    </div>
-
-                                    {/* 제목 */}
-                                    <div style={styles.cardTitle}>{report.title}</div>
-
-                                    {/* 내용 */}
-                                    <div style={styles.cardContent}>{report.content}</div>
-
-                                    {/* 이미지 */}
-                                    {report.imageUrls?.length > 0 && (
-                                        <img
-                                            src={`${apiBase}${report.imageUrls[0]}`}
-                                            alt="제보 이미지" style={styles.cardImage}
-                                            onError={(e) => { e.target.style.display = 'none' }}
-                                        />
-                                    )}
-
-                                    {/* 하단 */}
-                                    <div style={styles.cardFooter}>
-                                        <div style={styles.cardMeta}>
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
-                                                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-                                            </svg>
-                                            {date}
-                                            <span style={styles.metaDot}>·</span>
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
-                                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                                            </svg>
-                                            {report.sympathyCount || 0}명
-                                        </div>
-                                        {!isResolved && (
-                                            <button
-                                                style={styles.resolveBtn}
-                                                onClick={() => handleResolve(report.id)}
-                                                disabled={resolving === report.id}
-                                            >
-                                                {resolving === report.id ? (
-                                                    '처리 중...'
-                                                ) : (
-                                                    <>
-                                                        <CheckIcon />
-                                                        해결 완료
-                                                    </>
-                                                )}
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                )}
-            </div>
+          )}
         </div>
-    )
-}
 
-const styles = {
-    page: {
-        minHeight: '100vh', background: '#f9fafb',
-        fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
-    },
-    header: {
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', height: '56px',
-        background: '#fff', borderBottom: '1px solid #e5e7eb',
-        position: 'sticky', top: 0, zIndex: 100,
-    },
-    backBtn: {
-        display: 'flex', alignItems: 'center', gap: '6px',
-        background: 'none', border: 'none',
-        color: '#4b5563', fontSize: '13px', fontWeight: '600', cursor: 'pointer',
-    },
-    headerTitle: { fontSize: '15px', fontWeight: '700', color: '#111827' },
-    nickname: {
-        display: 'flex', alignItems: 'center', gap: '5px',
-        fontSize: '13px', color: '#6b7280', fontWeight: '500',
-    },
-    statsRow: {
-        display: 'flex', alignItems: 'center',
-        padding: '16px 24px', background: '#fff',
-        borderBottom: '1px solid #e5e7eb',
-    },
-    statBox: { flex: 1, textAlign: 'center', padding: '8px 0' },
-    statDivider: { width: '1px', height: '32px', background: '#e5e7eb' },
-    statNum: { fontSize: '24px', fontWeight: '800', color: '#111827', lineHeight: 1 },
-    statLabel: { fontSize: '11px', color: '#9ca3af', marginTop: '4px', fontWeight: '500' },
-    content: { padding: '20px 24px', maxWidth: '720px', margin: '0 auto' },
-    list: { display: 'flex', flexDirection: 'column', gap: '12px' },
-    empty: {
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        minHeight: '400px', textAlign: 'center',
-    },
-    goMapBtn: {
-        marginTop: '16px', padding: '9px 22px',
-        background: '#1d4ed8', color: '#fff',
-        border: 'none', borderRadius: '8px',
-        fontSize: '14px', fontWeight: '700', cursor: 'pointer',
-    },
-    card: {
-        background: '#fff', borderRadius: '12px',
-        border: '1px solid #e5e7eb', padding: '16px 18px',
-        display: 'flex', flexDirection: 'column', gap: '8px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-    },
-    cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    iconBox: {
-        width: '28px', height: '28px', borderRadius: '50%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    },
-    categoryText: { fontSize: '12px', fontWeight: '700' },
-    statusBadge: {
-        display: 'flex', alignItems: 'center', gap: '4px',
-        fontSize: '11px', fontWeight: '700',
-        padding: '3px 9px', borderRadius: '9999px',
-    },
-    cardTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', lineHeight: 1.4 },
-    cardContent: { fontSize: '13px', color: '#6b7280', lineHeight: 1.6 },
-    cardImage: { width: '100%', borderRadius: '8px', maxHeight: '180px', objectFit: 'cover' },
-    cardFooter: {
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        paddingTop: '8px', borderTop: '1px solid #f3f4f6',
-    },
-    cardMeta: {
-        display: 'flex', alignItems: 'center', gap: '5px',
-        fontSize: '12px', color: '#9ca3af',
-    },
-    metaDot: { color: '#d1d5db' },
-    resolveBtn: {
-        display: 'flex', alignItems: 'center', gap: '5px',
-        padding: '6px 14px', border: 'none', borderRadius: '7px',
-        background: '#22c55e', color: '#fff',
-        fontSize: '12px', fontWeight: '700', cursor: 'pointer',
-    },
+        <div className="reports-history-body">
+          <div className="reports-card-topline">
+            <span className="reports-category-badge" style={{ color: meta.color, background: meta.bg }}>
+              {meta.icon(meta.color)}
+              {categoryName}
+            </span>
+            <span className={`reports-status-pill ${isResolved ? 'is-done' : 'is-active'}`}>
+              {isResolved ? '해결 완료' : '진행 중'}
+            </span>
+          </div>
+
+          <h2>{report.title || '제목 없는 제보'}</h2>
+          <p>{report.content || '상세 내용이 입력되지 않았습니다.'}</p>
+
+          <div className="reports-meta-row">
+            <span>🕐 {formatDate(report.createdAt)}</span>
+            <span>📍 {locationText}</span>
+            <span>♡ {report.sympathyCount || 0}명</span>
+          </div>
+        </div>
+
+        <div className="reports-card-actions">
+          <button
+            className="reports-ghost-btn"
+            type="button"
+            onClick={() => navigate('/', {
+              state: {
+                focusReport: {
+                  ...report,
+                  reportId,
+                  latitude: report.latitude ?? report.lat,
+                  longitude: report.longitude ?? report.lng,
+                },
+              },
+            })}
+          >
+            지도에서 보기
+          </button>
+          {!isResolved ? (
+            <button
+              className="reports-resolve-btn"
+              type="button"
+              onClick={() => handleResolve(reportId)}
+              disabled={resolving === reportId}
+            >
+              {resolving === reportId ? '처리 중...' : <><SmallCheck /> 해결 완료</>}
+            </button>
+          ) : (
+            <span className="reports-done-mark"><SmallCheck /> 처리 완료</span>
+          )}
+        </div>
+      </article>
+    )
+  }
+
+  return (
+    <div className="reports-page">
+      <Header />
+
+      <main className="reports-page-inner">
+        <section className="reports-hero">
+          <div>
+            <span className="reports-eyebrow">SafePin Reports</span>
+            <h1>제보 내역을 한눈에 관리하세요</h1>
+            <p>
+              데이터베이스에 등록된 전체 재난 제보를 기준으로 현황과 처리 상태를 정리합니다.
+              검색·필터·정렬을 활용해 필요한 제보를 빠르게 확인할 수 있습니다.
+            </p>
+          </div>
+          <button type="button" className="reports-hero-btn" onClick={() => navigate('/')}>지도에서 보기</button>
+        </section>
+        <section className="reports-summary-grid">
+          <SummaryCard
+            type="total"
+            icon={<IconDocument />}
+            label="전체 제보"
+            value={reports.length}
+            description="DB에 등록된 전체 제보 수"
+          />
+          <SummaryCard
+            type="active"
+            icon={<IconClock />}
+            label="진행 중"
+            value={activeReports.length}
+            description="현재 처리 중인 제보"
+          />
+          <SummaryCard
+            type="resolved"
+            icon={<IconCheck />}
+            label="해결 완료"
+            value={resolvedReports.length}
+            description="해결이 완료된 제보"
+          />
+        </section>
+
+        <section className="reports-filter-panel">
+          <label className="reports-search-box">
+            <span>⌕</span>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="제목 또는 내용을 검색하세요"
+            />
+          </label>
+
+          <div className="reports-filter-group">
+            <span className="reports-filter-label">상태 필터</span>
+            <div className="reports-chip-row">
+              {Object.entries(statusMeta).map(([key, item]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`reports-chip ${statusFilter === key ? 'is-selected' : ''}`}
+                  style={statusFilter === key ? { color: item.color, background: item.bg, borderColor: item.bg } : undefined}
+                  onClick={() => setStatusFilter(key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="reports-filter-group reports-filter-group--wide">
+            <span className="reports-filter-label">카테고리 필터</span>
+            <div className="reports-chip-row reports-chip-row--scroll">
+              {categoryList.map((category) => {
+                const meta = CATEGORY_META[category] || CATEGORY_META.기타
+                const isAll = category === '전체'
+                const selected = categoryFilter === category
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    className={`reports-chip reports-category-chip ${selected ? 'is-selected' : ''}`}
+                    style={selected ? { color: isAll ? '#2563eb' : meta.color, background: isAll ? '#eff6ff' : meta.bg } : undefined}
+                    onClick={() => setCategoryFilter(category)}
+                  >
+                    {!isAll && <span>{meta.iconText}</span>}
+                    {category}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="reports-sort-group">
+            <span className="reports-filter-label">정렬</span>
+            <select value={sortType} onChange={(event) => setSortType(event.target.value)}>
+              <option value="latest">최근 등록 순</option>
+              <option value="oldest">오래된 순</option>
+              <option value="sympathy">공감 많은 순</option>
+              <option value="category">카테고리 순</option>
+            </select>
+          </div>
+
+          <button type="button" className="reports-reset-btn" onClick={resetFilters}>↻ 필터 초기화</button>
+        </section>
+
+        <section className="reports-content-grid">
+          <section className="reports-list-column">
+            {loading ? (
+              <div className="reports-empty-card">제보 내역을 불러오는 중입니다...</div>
+            ) : filteredReports.length === 0 ? (
+              <div className="reports-empty-card">
+                <strong>조건에 맞는 제보가 없습니다.</strong>
+                <span>검색어를 지우거나 필터를 초기화해 다시 확인해보세요.</span>
+                <button type="button" onClick={resetFilters}>필터 초기화</button>
+              </div>
+            ) : (
+              filteredReports.map(renderReportCard)
+            )}
+          </section>
+
+          <aside className="reports-side-column">
+            <section className="reports-side-card">
+              <div className="reports-side-title">↻ 최근 활동</div>
+              <div className="reports-activity-list">
+                {recentReports.length === 0 ? (
+                  <p className="reports-muted">최근 활동이 없습니다.</p>
+                ) : recentReports.map((report) => {
+                  const categoryName = normalizeCategory(report.categoryName)
+                  const meta = CATEGORY_META[categoryName] || CATEGORY_META.기타
+                  const isResolved = isResolvedReport(report)
+                  return (
+                    <button key={getReportId(report)} type="button" className="reports-activity-item" onClick={() => setSearch(report.title || '')}>
+                      <span className="reports-activity-icon" style={{ color: meta.color, background: meta.bg }}>{meta.icon(meta.color)}</span>
+                      <span>
+                        <strong>{report.title || '제목 없는 제보'}</strong>
+                        <small>{formatDate(report.createdAt)}</small>
+                      </span>
+                      <em className={isResolved ? 'is-done' : 'is-active'}>{isResolved ? '완료' : '진행 중'}</em>
+                    </button>
+                  )
+                })}
+              </div>
+              <button type="button" className="reports-side-link" onClick={resetFilters}>전체 제보 보기 ›</button>
+            </section>
+
+            <section className="reports-side-card">
+              <div className="reports-side-title">◷ 카테고리 분포</div>
+              <div className="reports-donut-row">
+                <div className="reports-donut" style={donutStyle}>
+                  <div>
+                    <strong>{reports.length}</strong>
+                    <span>전체</span>
+                  </div>
+                </div>
+                <div className="reports-legend">
+                  {mainCategoryStats.map(([category, count]) => {
+                    const meta = CATEGORY_META[category] || CATEGORY_META.기타
+                    const percent = reports.length ? Math.round((count / reports.length) * 1000) / 10 : 0
+                    return (
+                      <div key={category}>
+                        <span style={{ background: meta.color }} />
+                        <em>{category}</em>
+                        <strong>{count} ({percent}%)</strong>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="reports-side-card reports-tip-card">
+              <div className="reports-side-title">☼ 이용 안내</div>
+              <strong>해결 대기 중인 제보를 우선 확인하세요.</strong>
+              <p>빠른 확인과 상세한 설명은 문제 해결에 큰 도움이 됩니다.</p>
+              <button type="button" onClick={() => setStatusFilter('active')}>제보 관리 팁 보기 ›</button>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+  )
 }
 
 export default MyReportsPage

@@ -10,6 +10,66 @@ const CATEGORY_META = {
   가스누출: { color: '#22c55e', bg: '#f0fdf4' },
 }
 
+const MAX_IMAGE_SIZE = 2.5 * 1024 * 1024
+const MAX_IMAGE_DIMENSION = 1600
+
+function getSafeImageName(file) {
+  const base = file?.name?.replace(/\.[^.]+$/, '') || 'report-image'
+  return `${base}.jpg`
+}
+
+function compressImage(file) {
+  if (!file || !file.type?.startsWith('image/')) return Promise.resolve(file)
+
+  return new Promise((resolve) => {
+    const imageUrl = URL.createObjectURL(file)
+    const image = new Image()
+
+    image.onload = () => {
+      try {
+        const ratio = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(image.width, image.height))
+        const width = Math.max(1, Math.round(image.width * ratio))
+        const height = Math.max(1, Math.round(image.height * ratio))
+
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+
+        const context = canvas.getContext('2d')
+        context.drawImage(image, 0, 0, width, height)
+
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(imageUrl)
+            if (!blob) {
+              resolve(file)
+              return
+            }
+            if (blob.size >= file.size && file.size <= MAX_IMAGE_SIZE) {
+              resolve(file)
+              return
+            }
+            resolve(new File([blob], getSafeImageName(file), { type: 'image/jpeg' }))
+          },
+          'image/jpeg',
+          file.size > MAX_IMAGE_SIZE ? 0.78 : 0.86,
+        )
+      } catch (error) {
+        URL.revokeObjectURL(imageUrl)
+        console.error('[ReportModal] 이미지 압축 실패:', error)
+        resolve(file)
+      }
+    }
+
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl)
+      resolve(file)
+    }
+
+    image.src = imageUrl
+  })
+}
+
 function ReportModal({ latLng, onClose, onSubmitted }) {
   const memberId = localStorage.getItem('memberId')
   const [categories, setCategories] = useState([])
@@ -22,7 +82,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
 
   useEffect(() => {
     getCategories()
-        .then((res) => setCategories(res.data?.data || res.data || []))
+        .then((res) => setCategories(res.data?.data ?? res.data ?? []))
         .catch(() => setError('카테고리를 불러오지 못했습니다.'))
   }, [])
 
@@ -37,15 +97,42 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
     setLoading(true); setError('')
     try {
       const formData = new FormData()
-      formData.append('data', new Blob([JSON.stringify({
-        title, content, categoryId: Number(categoryId),
-        latitude: latLng.lat, longitude: latLng.lng,
-      })], { type: 'application/json' }))
-      if (image) formData.append('images', image)
+      // data는 JSON Blob이 아니라 문자열로 전송합니다.
+      // Spring에서 이미지 포함 multipart 요청을 안정적으로 파싱하기 위함입니다.
+      formData.append('data', JSON.stringify({
+        title: title.trim(),
+        content: content.trim(),
+        categoryId: Number(categoryId),
+        latitude: Number(latLng.lat),
+        longitude: Number(latLng.lng),
+      }))
+      if (image) {
+        const uploadImage = await compressImage(image)
+        if (uploadImage.size > 10 * 1024 * 1024) {
+          setError('사진 용량이 너무 큽니다. 10MB 이하 이미지로 다시 선택해주세요.')
+          setLoading(false)
+          return
+        }
+        formData.append('images', uploadImage, uploadImage.name || image.name || 'report-image.jpg')
+      }
       const res = await createReport(formData, memberId)
-      onSubmitted?.(res.data?.data || res.data)
+      const saved = res.data?.data ?? res.data ?? res
+      onSubmitted?.({
+        ...saved,
+        reportId: saved?.reportId ?? saved?.id,
+        latitude: saved?.latitude ?? latLng.lat,
+        longitude: saved?.longitude ?? latLng.lng,
+        categoryId: saved?.categoryId ?? Number(categoryId),
+        categoryName: saved?.categoryName ?? selectedCat?.name,
+        title: saved?.title ?? title,
+        content: saved?.content ?? content,
+        sympathyCount: saved?.sympathyCount ?? 0,
+      })
       onClose()
-    } catch { setError('제보 등록에 실패했습니다. 다시 시도해주세요.') }
+    } catch (error) {
+      console.error('[ReportModal] 제보 등록 실패:', error)
+      setError(error?.message || '제보 등록에 실패했습니다. 다시 시도해주세요.')
+    }
     finally { setLoading(false) }
   }
 
@@ -92,7 +179,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
                               background: isActive ? meta.bg : '#f9fafb',
                               border: isActive ? `2px solid ${meta.color}` : '1.5px solid #e5e7eb',
                               color: isActive ? meta.color : '#4b5563',
-                              fontWeight: isActive ? '700' : '500',
+                              fontWeight: isActive ? '900' : '750',
                             }}
                             onClick={() => setCategoryId(cat.id)}
                     >
@@ -112,7 +199,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
                       value={content} onChange={(e) => setContent(e.target.value)} />
 
             <label style={styles.label}>
-              사진 첨부 <span style={{ color: '#9ca3af', fontWeight: 400 }}>(선택)</span>
+              사진 첨부 <span style={{ color: '#9ca3af', fontWeight: 700 }}>(선택)</span>
             </label>
             {image ? (
                 <div style={{ position: 'relative' }}>
@@ -125,9 +212,22 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span style={{ fontSize: '12px', color: '#9ca3af' }}>클릭하여 사진 업로드</span>
-                  <input type="file" accept="image/*" style={{ display: 'none' }}
-                         onChange={(e) => setImage(e.target.files[0])} />
+                  <span style={{ fontSize: '16px', color: '#9ca3af' }}>클릭하여 사진 업로드</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      if (!file.type.startsWith('image/')) {
+                        setError('이미지 파일만 업로드할 수 있습니다.')
+                        return
+                      }
+                      setError('')
+                      setImage(file)
+                    }}
+                  />
                 </label>
             )}
 
@@ -175,15 +275,15 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: '6px',
     margin: '12px 20px 0', padding: '7px 12px',
     background: '#eff6ff', borderRadius: '8px',
-    fontSize: '12px', color: '#2563eb', fontWeight: '600',
+    fontSize: '15px', color: '#2563eb', fontWeight: '600',
   },
   body: { padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto' },
-  label: { fontSize: '12px', fontWeight: '700', color: '#374151', marginTop: '8px' },
+  label: { fontSize: '15px', fontWeight: '700', color: '#374151', marginTop: '8px' },
   catGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' },
-  catBtn: { padding: '8px 4px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.12s', textAlign: 'center' },
+  catBtn: { padding: '8px 4px', borderRadius: '8px', fontSize: '15px', cursor: 'pointer', transition: 'all 0.12s', textAlign: 'center' },
   input: {
     padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px',
-    fontSize: '14px', color: '#111827', outline: 'none',
+    fontSize: '15px', color: '#111827', outline: 'none',
     width: '100%', boxSizing: 'border-box', fontFamily: 'inherit',
   },
   fileLabel: {
@@ -202,14 +302,14 @@ const styles = {
   errorMsg: {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px',
     background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
-    color: '#dc2626', fontSize: '13px',
+    color: '#dc2626', fontSize: '15px',
   },
   footer: {
     display: 'flex', gap: '10px', justifyContent: 'flex-end',
     padding: '13px 20px', borderTop: '1px solid #f3f4f6', background: '#f9fafb',
   },
-  cancelBtn: { padding: '8px 18px', border: '1.5px solid #e5e7eb', borderRadius: '8px', background: '#fff', color: '#4b5563', fontSize: '14px', fontWeight: '600', cursor: 'pointer' },
-  submitBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 20px', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer' },
+  cancelBtn: { padding: '8px 18px', border: '1.5px solid #e5e7eb', borderRadius: '8px', background: '#fff', color: '#4b5563', fontSize: '15px', fontWeight: '600', cursor: 'pointer' },
+  submitBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 20px', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '700', cursor: 'pointer' },
 }
 
 export default ReportModal

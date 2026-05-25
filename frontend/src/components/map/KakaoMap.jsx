@@ -1,274 +1,451 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getReports } from '../../api/reportApi'
+import HeatmapLayer from './HeatmapLayer'
 
 const CATEGORY_COLOR = {
-  침수: '#3b82f6', 화재: '#ef4444', 교통: '#f59e0b',
-  낙석: '#78716c', 정전: '#eab308', 가스누출: '#22c55e',
+  침수: '#3b82f6',
+  화재: '#ef4444',
+  교통: '#f59e0b',
+  낙석: '#78716c',
+  정전: '#eab308',
+  가스누출: '#22c55e',
 }
 
-const getRisk = (count) => {
-  if (count < 2) return { size: 35, color: '59,130,246' }
-  if (count < 4) return { size: 50, color: '234,179,8' }
-  if (count < 6) return { size: 70, color: '249,115,22' }
-  return               { size: 90, color: '239,68,68' }
+const normalizeList = (response) => response?.data?.data ?? response?.data ?? response ?? []
+const toNumber = (value) => Number(value)
+const getReportId = (pin) => pin?.reportId ?? pin?.id
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
 }
 
-// 기본 핀 SVG
-const normalSvg = (color) => `
-  <svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
-    <path d="M16 0C7.16 0 0 7.16 0 16c0 10.5 16 24 16 24S32 26.5 32 16C32 7.16 24.84 0 16 0z" fill="${color}"/>
-    <circle cx="16" cy="16" r="7" fill="white"/>
-  </svg>`
+function getSavedLocation() {
+  try {
+    const raw = localStorage.getItem('safePinLastLocation')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const lat = Number(parsed.lat)
+    const lng = Number(parsed.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+    return { lat, lng }
+  } catch {
+    return null
+  }
+}
 
-// 선택된 핀 SVG
-const selectedSvg = (color) => `
-  <svg width="40" height="50" viewBox="0 0 40 50" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 0C9.0 0 0 9.0 0 20c0 13.0 20 30 20 30S40 33.0 40 20C40 9.0 31.0 0 20 0z" fill="${color}"/>
-    <circle cx="20" cy="20" r="11" fill="white" opacity="0.3"/>
-    <circle cx="20" cy="20" r="8" fill="white"/>
-    <circle cx="20" cy="20" r="4" fill="${color}"/>
-  </svg>`
+function saveLocation(lat, lng) {
+  try {
+    localStorage.setItem('safePinLastLocation', JSON.stringify({ lat, lng, updatedAt: Date.now() }))
+  } catch {
+    // localStorage 사용이 불가능한 환경에서는 조용히 무시합니다.
+  }
+}
 
-function KakaoMap({ pins, onMapClick, onPinsLoaded, onPinClick }) {
-  const mapRef            = useRef(null)
-  const mapObj            = useRef(null)
-  const markers           = useRef([])
-  const circleOverlays    = useRef([])
-  const myMarkerRef       = useRef(null)
-  const activeOverlayRef  = useRef(null)
-  const selectedMarkerRef = useRef(null)  // 현재 선택된 마커 정보 { marker, color }
+function getNearbyCount(target, list, range = 0.01) {
+  const targetLat = toNumber(target.latitude ?? target.lat)
+  const targetLng = toNumber(target.longitude ?? target.lng)
+
+  if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) return 0
+
+  return list.filter((pin) => {
+    const lat = toNumber(pin.latitude ?? pin.lat)
+    const lng = toNumber(pin.longitude ?? pin.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+    return Math.abs(targetLat - lat) <= range && Math.abs(targetLng - lng) <= range
+  }).length
+}
+
+function KakaoMap({
+  pins = [],
+  onMapClick,
+  onPinsLoaded,
+  onPinClick,
+  searchRequest,
+  locateRequest,
+  onSearchResult,
+  heatmapPins,
+  focusReportRequest,
+}) {
+  const mapRef = useRef(null)
+  const mapObj = useRef(null)
+  const markers = useRef([])
+  const markerMapRef = useRef(new Map())
+  const myMarkerRef = useRef(null)
+  const searchMarkerRef = useRef(null)
+  const infowindowRef = useRef(null)
+  const [mapReady, setMapReady] = useState(false)
+
+  const heatmapSource = heatmapPins || pins
+
+  const heatmapPoints = useMemo(() => {
+    return heatmapSource.map((pin) => {
+      const nearbyCount = getNearbyCount(pin, heatmapSource)
+      const sympathyCount = Number(pin.sympathyCount || 0)
+      return {
+        ...pin,
+        nearbyCount,
+        weight: Math.max(nearbyCount, sympathyCount),
+      }
+    })
+  }, [heatmapSource])
+
+  const drawMyLocation = (kakao, latlng, moveToCenter = false) => {
+    if (!mapObj.current) return
+    if (myMarkerRef.current) myMarkerRef.current.setMap(null)
+
+    const content = `
+      <div style="position:relative;width:40px;height:40px;transform:translate(-50%,-50%)">
+        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,0.25);animation:ping 1.5s ease-out infinite;"></div>
+        <div style="position:absolute;inset:6px;border-radius:50%;background:rgba(59,130,246,0.4);"></div>
+        <div style="position:absolute;inset:12px;border-radius:50%;background:#2563eb;border:2.5px solid #fff;box-shadow:0 0 0 2px #2563eb;"></div>
+      </div>
+      <style>@keyframes ping{0%{transform:scale(0.8);opacity:1;}100%{transform:scale(2.2);opacity:0;}}</style>`
+
+    myMarkerRef.current = new kakao.maps.CustomOverlay({
+      map: mapObj.current,
+      position: latlng,
+      content,
+      zIndex: 10,
+    })
+
+    if (moveToCenter) {
+      mapObj.current.setCenter(latlng)
+      mapObj.current.setLevel(4)
+    }
+  }
+
+
+  useEffect(() => {
+    window.__safePinRouteTo = (lat, lng, title = 'SafePin 제보 위치') => {
+      const safeLat = Number(lat)
+      const safeLng = Number(lng)
+      if (!Number.isFinite(safeLat) || !Number.isFinite(safeLng)) return
+      const encodedTitle = encodeURIComponent(title || 'SafePin 제보 위치')
+      window.open(`https://map.kakao.com/link/to/${encodedTitle},${safeLat},${safeLng}`, '_blank', 'noopener,noreferrer')
+    }
+
+    window.__safePinShareReport = async (encodedText) => {
+      const shareText = encodedText ? decodeURIComponent(encodedText) : 'SafePin 재난 제보를 확인해주세요.'
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: 'SafePin 재난 제보', text: shareText, url: window.location.href })
+        } else {
+          await navigator.clipboard.writeText(`${shareText}
+${window.location.href}`)
+          window.alert('제보 정보가 클립보드에 복사되었습니다.')
+        }
+      } catch (error) {
+        if (error?.name !== 'AbortError') window.alert('공유에 실패했습니다.')
+      }
+    }
+
+    return () => {
+      delete window.__safePinRouteTo
+      delete window.__safePinShareReport
+    }
+  }, [])
 
   useEffect(() => {
     const initMap = () => {
-      if (!window.kakao?.maps) { setTimeout(initMap, 300); return }
+      if (!window.kakao?.maps) {
+        setTimeout(initMap, 300)
+        return
+      }
+
       window.kakao.maps.load(() => {
         const { kakao } = window
         if (!mapRef.current || mapObj.current) return
 
-        mapObj.current = new kakao.maps.Map(mapRef.current, {
-          center: new kakao.maps.LatLng(37.3, 127.0),
-          level: 7,
-        })
+        const saved = getSavedLocation()
+        const fallback = saved || { lat: 37.3, lng: 127.0 }
 
-        setTimeout(() => mapObj.current?.relayout(), 100)
+        const createMap = (centerInfo, isCurrentLocation = false) => {
+          if (!mapRef.current || mapObj.current) return
 
-        kakao.maps.event.addListener(mapObj.current, 'click', (e) => {
-          onMapClick?.({ lat: e.latLng.getLat(), lng: e.latLng.getLng() })
-          if (activeOverlayRef.current) activeOverlayRef.current.setMap(null)
-          // 지도 클릭 시 선택 해제
-          resetSelectedMarker()
-        })
+          const center = new kakao.maps.LatLng(centerInfo.lat, centerInfo.lng)
+          mapObj.current = new kakao.maps.Map(mapRef.current, {
+            center,
+            level: isCurrentLocation ? 4 : 7,
+          })
 
-        getReports().then((res) => onPinsLoaded?.(res.data?.data ?? res.data ?? []))
-        showMyLocation(false)
+          kakao.maps.event.addListener(mapObj.current, 'click', (e) => {
+            onMapClick?.({ lat: e.latLng.getLat(), lng: e.latLng.getLng() })
+            if (infowindowRef.current) infowindowRef.current.close()
+          })
+
+          getReports()
+            .then((res) => onPinsLoaded?.(normalizeList(res)))
+            .catch((err) => console.error('[KakaoMap] 제보 목록 조회 실패:', err))
+
+          setTimeout(() => mapObj.current?.relayout(), 100)
+          setMapReady(true)
+
+          if (isCurrentLocation) {
+            drawMyLocation(kakao, center, false)
+          } else if (saved) {
+            drawMyLocation(kakao, center, false)
+          }
+        }
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            const current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+            saveLocation(current.lat, current.lng)
+            createMap(current, true)
+          }, () => {
+            createMap(fallback, false)
+          }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 })
+        } else {
+          createMap(fallback, false)
+        }
       })
     }
+
     initMap()
-  }, [])
-
-  // 선택된 마커를 기본 상태로 되돌림
-  const resetSelectedMarker = () => {
-    if (!selectedMarkerRef.current) return
-    const { marker, color } = selectedMarkerRef.current
-    const image = makeMarkerImage(normalSvg(color), 32, 40, 16, 40)
-    marker.setImage(image)
-    selectedMarkerRef.current = null
-  }
-
-  const makeMarkerImage = (svg, w, h, ox, oy) => {
-    const { kakao } = window
-    return new kakao.maps.MarkerImage(
-        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-        new kakao.maps.Size(w, h),
-        { offset: new kakao.maps.Point(ox, oy) }
-    )
-  }
+  }, [onMapClick, onPinsLoaded])
 
   useEffect(() => {
     if (!mapObj.current || !window.kakao?.maps) return
     const { kakao } = window
 
-    markers.current.forEach((m) => m.setMap(null))
+    markers.current.forEach((marker) => marker.setMap(null))
     markers.current = []
-    circleOverlays.current.forEach((o) => o.setMap(null))
-    circleOverlays.current = []
-    if (activeOverlayRef.current) activeOverlayRef.current.setMap(null)
-    selectedMarkerRef.current = null
+    markerMapRef.current.clear()
+    if (infowindowRef.current) infowindowRef.current.close()
 
     pins.forEach((pin) => {
-      if (pin.latitude == null || pin.longitude == null) return
+      const lat = Number(pin.latitude ?? pin.lat)
+      const lng = Number(pin.longitude ?? pin.lng)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
 
-      const color    = CATEGORY_COLOR[pin.categoryName] || '#8b5cf6'
-      const position = new kakao.maps.LatLng(pin.latitude, pin.longitude)
+      const color = pin.categoryColor || CATEGORY_COLOR[pin.categoryName] || '#8b5cf6'
+      const nearbyCount = getNearbyCount(pin, pins)
+      const svg = `
+        <svg width="34" height="42" viewBox="0 0 34 42" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17 0C7.61 0 0 7.61 0 17c0 11.16 17 25 17 25s17-13.84 17-25C34 7.61 26.39 0 17 0z" fill="${color}"/>
+          <circle cx="17" cy="17" r="7.5" fill="white"/>
+        </svg>`
 
-      // 히트맵
-      const risk = getRisk(pin.sympathyCount || 0)
-      const circleDiv = document.createElement('div')
-      circleDiv.style.cssText = `
-        width: ${risk.size}px;
-        height: ${risk.size}px;
-        border-radius: 50%;
-        background: radial-gradient(circle,
-          rgba(${risk.color},0.4) 0%,
-          rgba(${risk.color},0.2) 50%,
-          rgba(${risk.color},0) 100%
-        );
-        transform: translate(0%, 30%);
-        pointer-events: none;
-      `
-      const circleOverlay = new kakao.maps.CustomOverlay({
-        map: mapObj.current,
-        position,
-        content: circleDiv,
-        zIndex: -1,
-        yAnchor: 1,
-      })
-      circleOverlays.current.push(circleOverlay)
-
+      const markerImage = new kakao.maps.MarkerImage(
+        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+        new kakao.maps.Size(34, 42),
+        { offset: new kakao.maps.Point(17, 42) }
+      )
 
       const marker = new kakao.maps.Marker({
         map: mapObj.current,
-        position,
-        image: makeMarkerImage(normalSvg(color), 32, 40, 16, 40),
+        position: new kakao.maps.LatLng(lat, lng),
+        image: markerImage,
+        title: pin.title,
       })
 
-      // 팝업 오버레이
-      const overlayContent = document.createElement('div')
-      overlayContent.innerHTML = `
-        <div style="
-          background:#fff; border:1px solid #e5e7eb; border-radius:14px;
-          box-shadow:0 8px 24px rgba(0,0,0,0.12); width:260px;
-          overflow:hidden; font-family:'Apple SD Gothic Neo',sans-serif;
-        ">
-          <div style="padding:14px 14px 10px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="
-              background:${color}; color:#fff;
-              padding:3px 10px; border-radius:999px;
-              font-size:11px; font-weight:700;
-            ">${pin.categoryName || '기타'}</span>
-            <button id="close-${pin.id}" style="
-              background:none; border:none; cursor:pointer;
-              color:#9ca3af; padding:2px; display:flex; align-items:center;
-            ">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M18 6 6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-          <div style="padding:0 14px 14px;">
-            <div style="font-size:15px; font-weight:700; color:#111827; margin-bottom:8px; line-height:1.4;">
-              ${pin.title || '제목 없음'}
-            </div>
-            <div style="display:grid; grid-template-columns:auto 1fr; gap:5px 10px; margin-bottom:10px;">
-              <span style="font-size:12px; color:#9ca3af;">내용</span>
-              <span style="font-size:12px; color:#374151; line-height:1.5;">${pin.content || '-'}</span>
-              <span style="font-size:12px; color:#9ca3af;">제보자</span>
-              <span style="font-size:12px; color:#374151;">${pin.nickname || '시민 제보'}</span>
-            </div>
-            <div style="
-              font-size:12px; color:#ef4444; font-weight:600;
-              padding-top:8px; border-top:1px solid #f3f4f6;
-            ">⚠️ ${pin.sympathyCount || 0}명이 위험해요</div>
-          </div>
-        </div>`
+      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+      const imageHtml = pin.imageUrls && pin.imageUrls.length > 0
+        ? `<img src="${apiBase}${pin.imageUrls[0]}"
+            style="width:100%;border-radius:8px;margin-top:8px;max-height:140px;object-fit:cover;"
+            onerror="this.style.display='none'" />`
+        : ''
 
-      const overlay = new kakao.maps.CustomOverlay({
-        content: overlayContent,
-        position,
-        yAnchor: 1.3,
-        zIndex: 999,
+      const reportText = `${pin.categoryName ? `[${pin.categoryName}] ` : ''}${pin.title || 'SafePin 제보'}${pin.content ? `\n${pin.content}` : ''}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}`
+      const escapedTitle = escapeHtml(pin.title || '제보')
+      const escapedContent = escapeHtml(pin.content || '')
+      const escapedCategory = escapeHtml(pin.categoryName || '기타')
+      const encodedText = encodeURIComponent(reportText)
+      const routeTitle = escapeHtml(pin.title || pin.categoryName || 'SafePin 제보 위치')
+
+      const infowindow = new kakao.maps.InfoWindow({
+        content: `
+          <div style="padding:14px 16px;min-width:240px;max-width:300px;font-family:'Apple SD Gothic Neo',sans-serif;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+              <span style="background:${color};color:#fff;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;">${escapedCategory}</span>
+              ${nearbyCount >= 3 ? '<span style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">위험지역</span>' : ''}
+            </div>
+            <div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:6px;">${escapedTitle}</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.5;margin-bottom:8px;">${escapedContent}</div>
+            ${imageHtml}
+            <div style="font-size:11px;color:#94a3b8;margin-top:8px;">⚠️ ${pin.sympathyCount || 0}명이 위험해요 · 주변 ${nearbyCount}건</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;">
+              <button onclick="window.__safePinRouteTo(${lat}, ${lng}, '${routeTitle}')" style="border:none;border-radius:9px;background:#2563eb;color:#fff;padding:8px 6px;font-size:12px;font-weight:800;cursor:pointer;">경로</button>
+              <button onclick="window.__safePinShareReport('${encodedText}')" style="border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;padding:8px 6px;font-size:12px;font-weight:800;cursor:pointer;">공유</button>
+            </div>
+          </div>`,
+        removable: true,
       })
 
       kakao.maps.event.addListener(marker, 'click', () => {
-        resetSelectedMarker()
-
-        // 클릭한 마커 강조
-        marker.setImage(makeMarkerImage(selectedSvg(color), 40, 50, 20, 50))
-        selectedMarkerRef.current = { marker, color }
-
-        // 팝업 열기
-        if (activeOverlayRef.current) activeOverlayRef.current.setMap(null)
-        overlay.setMap(mapObj.current)
-        activeOverlayRef.current = overlay
+        if (infowindowRef.current) infowindowRef.current.close()
+        infowindow.open(mapObj.current, marker)
+        infowindowRef.current = infowindow
         onPinClick?.(pin)
       })
 
-      overlayContent.querySelector(`#close-${pin.id}`).onclick = () => {
-        overlay.setMap(null)
-        resetSelectedMarker()
-      }
-
       markers.current.push(marker)
+      const reportId = getReportId(pin)
+      if (reportId != null) markerMapRef.current.set(String(reportId), { marker, infowindow, pin })
     })
-  }, [pins])
+  }, [pins, onPinClick])
 
-  const showMyLocation = (moveCenter = true) => {
-    if (!navigator.geolocation || !mapObj.current || !window.kakao?.maps) return
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const latlng = new window.kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude)
-      if (myMarkerRef.current) myMarkerRef.current.setMap(null)
+  useEffect(() => {
+    if (!focusReportRequest || !mapObj.current || !window.kakao?.maps) return
 
-      myMarkerRef.current = new window.kakao.maps.CustomOverlay({
+    const lat = Number(focusReportRequest.latitude ?? focusReportRequest.lat)
+    const lng = Number(focusReportRequest.longitude ?? focusReportRequest.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    const { kakao } = window
+    const latlng = new kakao.maps.LatLng(lat, lng)
+    mapObj.current.setCenter(latlng)
+    mapObj.current.setLevel(4)
+
+    const reportId = getReportId(focusReportRequest)
+    const matched = reportId != null ? markerMapRef.current.get(String(reportId)) : null
+
+    if (matched) {
+      if (infowindowRef.current) infowindowRef.current.close()
+      matched.infowindow.open(mapObj.current, matched.marker)
+      infowindowRef.current = matched.infowindow
+      onPinClick?.(matched.pin)
+    }
+  }, [focusReportRequest, pins, onPinClick])
+
+  useEffect(() => {
+    if (!searchRequest || !mapObj.current || !window.kakao?.maps) return
+
+    const { kakao } = window
+
+    const moveToPlace = (place) => {
+      if (!place) return
+      const lat = Number(place.y ?? place.lat ?? place.latitude)
+      const lng = Number(place.x ?? place.lng ?? place.longitude)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+      const latlng = new kakao.maps.LatLng(lat, lng)
+      mapObj.current.setCenter(latlng)
+      mapObj.current.setLevel(4)
+
+      if (searchMarkerRef.current) searchMarkerRef.current.setMap(null)
+      searchMarkerRef.current = new kakao.maps.Marker({
         map: mapObj.current,
         position: latlng,
-        content: `
-          <div style="position:relative;width:40px;height:40px;transform:translate(-50%,-50%)">
-            <div style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,0.25);animation:ping 1.5s ease-out infinite;"></div>
-            <div style="position:absolute;inset:6px;border-radius:50%;background:rgba(59,130,246,0.4);"></div>
-            <div style="position:absolute;inset:12px;border-radius:50%;background:#2563eb;border:2.5px solid #fff;"></div>
-          </div>
-          <style>@keyframes ping{0%{transform:scale(0.8);opacity:1;}100%{transform:scale(2.2);opacity:0;}}</style>`,
-        zIndex: 10,
+        title: place.place_name || place.address_name || '검색 위치',
       })
 
-      if (moveCenter) {
-        mapObj.current.setCenter(latlng)
-        mapObj.current.setLevel(4)
+      onSearchResult?.({ ok: true, place })
+    }
+
+    if (searchRequest.place) {
+      moveToPlace(searchRequest.place)
+      return
+    }
+
+    if (!searchRequest.keyword || !window.kakao?.maps?.services) return
+    const keyword = searchRequest.keyword.trim()
+    if (!keyword) return
+
+    const places = new kakao.maps.services.Places()
+
+    places.keywordSearch(keyword, (data, status) => {
+      if (status !== kakao.maps.services.Status.OK || !data?.length) {
+        onSearchResult?.({ ok: false, message: '검색 결과가 없습니다.' })
+        return
       }
+
+      moveToPlace(data[0])
+    })
+  }, [searchRequest, onSearchResult])
+
+  useEffect(() => {
+    if (!locateRequest || !navigator.geolocation || !mapObj.current || !window.kakao?.maps) return
+
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const { kakao } = window
+      saveLocation(pos.coords.latitude, pos.coords.longitude)
+      const latlng = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude)
+      drawMyLocation(kakao, latlng, true)
+    }, () => {
+      onSearchResult?.({ ok: false, message: '현재 위치를 가져오지 못했습니다.' })
+    }, { enableHighAccuracy: true, timeout: 5000 })
+  }, [locateRequest, onSearchResult])
+
+  const handleZoomIn = () => {
+    if (!mapObj.current) return
+    mapObj.current.setLevel(mapObj.current.getLevel() - 1)
+  }
+
+  const handleZoomOut = () => {
+    if (!mapObj.current) return
+    mapObj.current.setLevel(mapObj.current.getLevel() + 1)
+  }
+
+  const handleMyLocation = () => {
+    if (!navigator.geolocation || !mapObj.current || !window.kakao?.maps) return
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const { kakao } = window
+      saveLocation(pos.coords.latitude, pos.coords.longitude)
+      const latlng = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude)
+      drawMyLocation(kakao, latlng, true)
     })
   }
 
   return (
-      <div style={{ position: 'relative', flex: 1, height: '100%' }}>
-        <div ref={mapRef} style={{ width: '100%', height: '100%', position: 'relative' }} />
-
-        <div style={styles.controlBox}>
-          <button style={styles.controlBtn}
-                  onClick={() => mapObj.current?.setLevel(mapObj.current.getLevel() - 1)}>
-            +
-          </button>
-          <div style={styles.divider} />
-          <button style={styles.controlBtn}
-                  onClick={() => mapObj.current?.setLevel(mapObj.current.getLevel() + 1)}>
-            −
-          </button>
-          <div style={styles.divider} />
-          <button style={styles.controlBtn} onClick={() => showMyLocation(true)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-            </svg>
-          </button>
-        </div>
+    <div className="kakao-map-shell" style={styles.shell}>
+      <div ref={mapRef} className="kakao-map" style={styles.map} />
+      {mapReady && (
+        <HeatmapLayer
+          map={mapObj.current}
+          coordinates={heatmapPoints}
+          threshold={3}
+        />
+      )}
+      <div style={styles.controlBox}>
+        <button type="button" style={styles.controlBtn} onClick={handleZoomIn}>+</button>
+        <div style={styles.divider} />
+        <button type="button" style={styles.controlBtn} onClick={handleZoomOut}>−</button>
+        <div style={styles.divider} />
+        <button type="button" style={styles.controlBtn} onClick={handleMyLocation}>🎯</button>
       </div>
+      <div style={styles.heatmapLegend}>
+        <span style={styles.legendDot} /> 제보 밀집/공감 위험도
+      </div>
+    </div>
   )
 }
 
 const styles = {
+  shell: { position: 'relative', flex: 1, height: '100%' },
+  map: { width: '100%', height: '100%' },
   controlBox: {
-    position: 'absolute', top: '16px', left: '16px',
+    position: 'absolute', top: '18px', left: '18px',
     display: 'flex', flexDirection: 'column',
     background: '#fff', borderRadius: '10px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
-    overflow: 'hidden', zIndex: 10,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    overflow: 'hidden', zIndex: 20,
   },
   controlBtn: {
-    width: '38px', height: '38px', border: 'none', background: '#fff',
-    fontSize: '18px', cursor: 'pointer',
+    width: '42px', height: '42px', border: 'none', background: '#fff',
+    fontSize: '21px', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     color: '#374151', fontWeight: '600',
   },
-  divider: { height: '1px', background: '#f3f4f6', margin: '0 6px' },
+  divider: { height: '1px', background: '#e2e8f0', margin: '0 6px' },
+  heatmapLegend: {
+    position: 'absolute', left: '16px', bottom: '16px',
+    display: 'flex', alignItems: 'center', gap: '7px',
+    padding: '8px 10px', background: 'rgba(255,255,255,0.94)',
+    border: '1px solid #e5e7eb', borderRadius: '10px',
+    fontSize: '12px', color: '#374151', fontWeight: '700',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.12)', zIndex: 20,
+  },
+  legendDot: {
+    width: '12px', height: '12px', borderRadius: '50%',
+    background: 'linear-gradient(135deg, #facc15, #f97316, #ef4444)',
+    display: 'inline-block',
+  },
 }
 
 export default KakaoMap

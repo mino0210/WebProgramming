@@ -11,7 +11,7 @@ const getDangerLevel = (count) => {
   if (!count || count < 2) return { label: '낮음', color: '#2563eb', bg: '#dbeafe' }
   if (count < 4)            return { label: '보통', color: '#d97706', bg: '#fef3c7' }
   if (count < 6)            return { label: '높음', color: '#ea580c', bg: '#ffedd5' }
-  return                           { label: '높음', color: '#dc2626', bg: '#fee2e2' }
+  return                           { label: '위험', color: '#dc2626', bg: '#fee2e2' }
 }
 
 const timeAgo = (dateStr) => {
@@ -51,30 +51,30 @@ function ReportCard({ report }) {
 
 const styles = {
   card: {
-    display: 'flex', alignItems: 'flex-start', gap: '11px',
-    padding: '12px 16px', borderBottom: '1px solid #f3f4f6',
+    display: 'flex', alignItems: 'flex-start', gap: '13px',
+    padding: '15px 18px', borderBottom: '1px solid #f3f4f6',
     background: '#fff', transition: 'background 0.12s',
   },
   iconBox: {
-    width: '36px', height: '36px', borderRadius: '50%',
+    width: '42px', height: '42px', borderRadius: '50%',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   body: { flex: 1, minWidth: 0 },
   topRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' },
-  category: { fontSize: '11px', fontWeight: '700' },
-  time: { fontSize: '11px', color: '#9ca3af' },
+  category: { fontSize: '13px', fontWeight: '900' },
+  time: { fontSize: '12px', fontWeight: '700', color: '#9ca3af' },
   title: {
-    fontSize: '13px', fontWeight: '600', color: '#111827',
+    fontSize: '15px', fontWeight: '800', color: '#111827',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '2px',
   },
   content: {
-    fontSize: '12px', color: '#6b7280', lineHeight: 1.4,
+    fontSize: '13px', fontWeight: '650', color: '#6b7280', lineHeight: 1.4,
     display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
   },
   right: { flexShrink: 0, alignSelf: 'center' },
   badge: {
-    display: 'inline-block', fontSize: '11px', fontWeight: '700',
-    padding: '3px 7px', borderRadius: '5px', whiteSpace: 'nowrap',
+    display: 'inline-block', fontSize: '12px', fontWeight: '900',
+    padding: '5px 9px', borderRadius: '5px', whiteSpace: 'nowrap',
   },
 }
 

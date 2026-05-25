@@ -1,115 +1,155 @@
 import { useEffect, useRef } from 'react'
-import h337 from 'heatmap.js'
+
+const DEFAULT_RANGE = 0.01
 
 function getLatitude(item) {
-    return item.latitude ?? item.lat
+  return Number(item?.latitude ?? item?.lat)
 }
 
 function getLongitude(item) {
-    return item.longitude ?? item.lng
+  return Number(item?.longitude ?? item?.lng)
+}
+
+function getReportId(item) {
+  return item?.reportId ?? item?.id
 }
 
 function getWeight(item) {
-    return item.sympathyCount ?? item.count ?? item.weight ?? 1
+  return Number(item?.sympathyCount ?? item?.count ?? item?.weight ?? 1) || 1
 }
 
-function HeatmapLayer({ map, coordinates = [], threshold = 1 }) {
-    const containerRef = useRef(null)
-    const heatmapRef = useRef(null)
+function getDistanceMeters(a, b) {
+  const lat1 = getLatitude(a)
+  const lng1 = getLongitude(a)
+  const lat2 = getLatitude(b)
+  const lng2 = getLongitude(b)
 
-    useEffect(() => {
-        if (!map || !window.kakao || !window.kakao.maps) return
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return 0
 
-        const mapNode = map.getNode?.()
-        if (!mapNode) return
+  const earthRadius = 6371000
+  const toRad = (value) => (value * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const rLat1 = toRad(lat1)
+  const rLat2 = toRad(lat2)
 
-        const heatmapContainer = document.createElement('div')
-        heatmapContainer.className = 'heatmap-layer'
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLng / 2) ** 2
 
-        // heatmap-layer가 absolute로 올라가야 해서 기준점만 잡아줌
-        if (getComputedStyle(mapNode).position === 'static') {
-            mapNode.style.position = 'relative'
-        }
+  return 2 * earthRadius * Math.asin(Math.sqrt(h))
+}
 
-        mapNode.appendChild(heatmapContainer)
+function makeClusters(points, range = DEFAULT_RANGE) {
+  const validPoints = points
+    .map((item) => ({
+      ...item,
+      _lat: getLatitude(item),
+      _lng: getLongitude(item),
+      _weight: getWeight(item),
+    }))
+    .filter((item) => Number.isFinite(item._lat) && Number.isFinite(item._lng))
 
-        containerRef.current = heatmapContainer
-        heatmapRef.current = h337.create({
-            container: heatmapContainer,
-            radius: 45,
-            maxOpacity: 0.55,
-            minOpacity: 0,
-            blur: 0.85,
-            gradient: {
-                0.2: '#ef4444',
-                0.5: '#ef4444',
-                0.8: '#ef4444',
-                1.0: '#ef4444',
-            }
-        })
+  const visited = new Set()
+  const clusters = []
 
-        return () => {
-            heatmapRef.current = null
-            containerRef.current?.remove()
-            containerRef.current = null
-        }
-    }, [map])
+  validPoints.forEach((seed, seedIndex) => {
+    const seedId = getReportId(seed) ?? seedIndex
+    if (visited.has(seedId)) return
 
-    useEffect(() => {
-        if (!map || !heatmapRef.current || !containerRef.current) return
-        if (!window.kakao || !window.kakao.maps) return
+    const group = validPoints.filter((candidate, candidateIndex) => {
+      const candidateId = getReportId(candidate) ?? candidateIndex
+      const near = Math.abs(seed._lat - candidate._lat) <= range && Math.abs(seed._lng - candidate._lng) <= range
+      if (near) visited.add(candidateId)
+      return near
+    })
 
-        const renderHeatmap = () => {
-            const projection = map.getProjection()
-            if (!projection) return
+    const totalWeight = group.reduce((sum, item) => sum + Math.max(1, item._weight), 0)
+    const centerLat = group.reduce((sum, item) => sum + item._lat, 0) / group.length
+    const centerLng = group.reduce((sum, item) => sum + item._lng, 0) / group.length
+    const maxSympathy = Math.max(...group.map((item) => item._weight), 0)
+    const maxDistance = Math.max(
+      ...group.map((item) => getDistanceMeters({ latitude: centerLat, longitude: centerLng }, item)),
+      0
+    )
 
-            const points = coordinates
-                .map((item) => {
-                    const latitude = getLatitude(item)
-                    const longitude = getLongitude(item)
-                    const weight = getWeight(item)
+    clusters.push({
+      center: { latitude: centerLat, longitude: centerLng },
+      count: group.length,
+      weight: Math.max(totalWeight, maxSympathy),
+      maxSympathy,
+      radius: Math.max(350, Math.min(1800, maxDistance + 360)),
+      points: group,
+    })
+  })
 
-                    if (!latitude || !longitude) return null
-                    if (weight < threshold) return null
+  return clusters
+}
 
-                    const latlng = new window.kakao.maps.LatLng(latitude, longitude)
-                    const point = projection.containerPointFromCoords(latlng)
+function getRiskStyle(cluster, threshold) {
+  const score = Math.max(cluster.count, cluster.maxSympathy, cluster.weight / 2)
 
-                    return {
-                        x: Math.round(point.x),
-                        y: Math.round(point.y),
-                        value: weight,
-                    }
-                })
-                .filter(Boolean)
+  if (score >= threshold + 3) {
+    return { fillColor: '#ef4444', opacity: 0.2 }
+  }
 
-            const maxValue = Math.max(1, ...points.map((point) => point.value))
+  if (score >= threshold + 1) {
+    return { fillColor: '#f97316', opacity: 0.18 }
+  }
 
-            heatmapRef.current.setData({
-                min: 0,
-                max: maxValue,
-                data: points,
-            })
-        }
+  return { fillColor: '#f59e0b', opacity: 0.16 }
+}
 
-        renderHeatmap()
+function drawSoftHeatCircle(map, center, radius, style) {
+  const layers = [
+    { radius: radius * 1.08, opacity: style.opacity * 0.38 },
+    { radius: radius * 0.82, opacity: style.opacity * 0.62 },
+    { radius: radius * 0.55, opacity: style.opacity },
+  ]
 
-        const events = window.kakao.maps.event
+  return layers.map((layer) => {
+    const circle = new window.kakao.maps.Circle({
+      center,
+      radius: layer.radius,
+      strokeWeight: 0,
+      strokeOpacity: 0,
+      fillColor: style.fillColor,
+      fillOpacity: layer.opacity,
+      zIndex: 1,
+    })
 
-        events.addListener(map, 'center_changed', renderHeatmap)
-        events.addListener(map, 'zoom_changed', renderHeatmap)
-        events.addListener(map, 'bounds_changed', renderHeatmap)
-        window.addEventListener('resize', renderHeatmap)
+    circle.setMap(map)
+    return circle
+  })
+}
 
-        return () => {
-            events.removeListener(map, 'center_changed', renderHeatmap)
-            events.removeListener(map, 'zoom_changed', renderHeatmap)
-            events.removeListener(map, 'bounds_changed', renderHeatmap)
-            window.removeEventListener('resize', renderHeatmap)
-        }
-    }, [map, coordinates, threshold])
+function HeatmapLayer({ map, coordinates = [], threshold = 3, range = DEFAULT_RANGE }) {
+  const overlaysRef = useRef([])
 
-    return null
+  useEffect(() => {
+    if (!map || !window.kakao?.maps) return undefined
+
+    overlaysRef.current.forEach((overlay) => overlay.setMap(null))
+    overlaysRef.current = []
+
+    const clusters = makeClusters(coordinates, range).filter((cluster) => {
+      return cluster.count >= threshold || cluster.maxSympathy >= threshold
+    })
+
+    clusters.forEach((cluster) => {
+      const style = getRiskStyle(cluster, threshold)
+      const center = new window.kakao.maps.LatLng(cluster.center.latitude, cluster.center.longitude)
+      const circles = drawSoftHeatCircle(map, center, cluster.radius, style)
+      overlaysRef.current.push(...circles)
+    })
+
+    return () => {
+      overlaysRef.current.forEach((overlay) => overlay.setMap(null))
+      overlaysRef.current = []
+    }
+  }, [map, coordinates, threshold, range])
+
+  return null
 }
 
 export default HeatmapLayer
