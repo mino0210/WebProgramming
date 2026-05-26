@@ -14,8 +14,8 @@ function getReportId(item) {
   return item?.reportId ?? item?.id
 }
 
-function getWeight(item) {
-  return Number(item?.sympathyCount ?? item?.count ?? item?.weight ?? 1) || 1
+function getSympathyCount(item) {
+  return Number(item?.sympathyCount ?? item?.count ?? item?.weight ?? 0) || 0
 }
 
 function getDistanceMeters(a, b) {
@@ -46,7 +46,7 @@ function makeClusters(points, range = DEFAULT_RANGE) {
       ...item,
       _lat: getLatitude(item),
       _lng: getLongitude(item),
-      _weight: getWeight(item),
+      _sympathy: getSympathyCount(item),
     }))
     .filter((item) => Number.isFinite(item._lat) && Number.isFinite(item._lng))
 
@@ -64,10 +64,10 @@ function makeClusters(points, range = DEFAULT_RANGE) {
       return near
     })
 
-    const totalWeight = group.reduce((sum, item) => sum + Math.max(1, item._weight), 0)
     const centerLat = group.reduce((sum, item) => sum + item._lat, 0) / group.length
     const centerLng = group.reduce((sum, item) => sum + item._lng, 0) / group.length
-    const maxSympathy = Math.max(...group.map((item) => item._weight), 0)
+    const maxSympathy = Math.max(...group.map((item) => item._sympathy), 0)
+    const score = group.length + maxSympathy
     const maxDistance = Math.max(
       ...group.map((item) => getDistanceMeters({ latitude: centerLat, longitude: centerLng }, item)),
       0
@@ -76,7 +76,7 @@ function makeClusters(points, range = DEFAULT_RANGE) {
     clusters.push({
       center: { latitude: centerLat, longitude: centerLng },
       count: group.length,
-      weight: Math.max(totalWeight, maxSympathy),
+      score,
       maxSympathy,
       radius: Math.max(350, Math.min(1800, maxDistance + 360)),
       points: group,
@@ -87,7 +87,7 @@ function makeClusters(points, range = DEFAULT_RANGE) {
 }
 
 function getRiskStyle(cluster, threshold) {
-  const score = Math.max(cluster.count, cluster.maxSympathy, cluster.weight / 2)
+  const score = cluster.score
 
   if (score >= threshold + 3) {
     return { fillColor: '#ef4444', opacity: 0.2 }
@@ -133,7 +133,7 @@ function HeatmapLayer({ map, coordinates = [], threshold = 3, range = DEFAULT_RA
     overlaysRef.current = []
 
     const clusters = makeClusters(coordinates, range).filter((cluster) => {
-      return cluster.count >= threshold || cluster.maxSympathy >= threshold
+      return cluster.score >= threshold
     })
 
     clusters.forEach((cluster) => {

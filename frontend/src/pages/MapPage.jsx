@@ -29,24 +29,37 @@ function getNearbyCount(target, list, range = DENSITY_RANGE) {
   }).length
 }
 
+function getNearbyPins(target, list, range = DENSITY_RANGE) {
+  const targetLat = Number(target?.latitude ?? target?.lat)
+  const targetLng = Number(target?.longitude ?? target?.lng)
+  if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) return []
+
+  return list.filter((pin) => {
+    const lat = Number(pin?.latitude ?? pin?.lat)
+    const lng = Number(pin?.longitude ?? pin?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+    return Math.abs(targetLat - lat) <= range && Math.abs(targetLng - lng) <= range
+  })
+}
+
+function getRiskScore(target, list, range = DENSITY_RANGE) {
+  const nearby = getNearbyPins(target, list, range)
+  const sympathy = Number(target?.sympathyCount || 0)
+  const maxSympathy = Math.max(sympathy, ...nearby.map((pin) => Number(pin?.sympathyCount || 0)), 0)
+  return {
+    nearby,
+    count: nearby.length,
+    score: maxSympathy + nearby.length,
+  }
+}
+
 function collectDangerAreaIds(list, range = DENSITY_RANGE, threshold = DENSITY_THRESHOLD) {
   const dangerIds = new Set()
 
   list.forEach((seed) => {
-    const seedLat = Number(seed?.latitude ?? seed?.lat)
-    const seedLng = Number(seed?.longitude ?? seed?.lng)
-    if (!Number.isFinite(seedLat) || !Number.isFinite(seedLng)) return
-
-    const nearby = list.filter((pin) => {
-      const lat = Number(pin?.latitude ?? pin?.lat)
-      const lng = Number(pin?.longitude ?? pin?.lng)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
-      return Math.abs(seedLat - lat) <= range && Math.abs(seedLng - lng) <= range
-    })
-
-    const maxSympathy = Math.max(...nearby.map((pin) => Number(pin?.sympathyCount || 0)), 0)
-    if (nearby.length >= threshold || maxSympathy >= threshold) {
-      nearby.forEach((pin) => {
+    const risk = getRiskScore(seed, list, range)
+    if (risk.score >= threshold) {
+      risk.nearby.forEach((pin) => {
         const id = getReportId(pin)
         if (id != null) dangerIds.add(String(id))
       })
@@ -79,6 +92,7 @@ function MapPage() {
   const location = useLocation()
   const [pins, setPins] = useState([])
   const [alerts, setAlerts] = useState([])
+  const [alertsEnabled, setAlertsEnabled] = useState(() => localStorage.getItem('safePinAlertsEnabled') !== 'false')
   const [categories, setCategories] = useState([])
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [dangerOnly, setDangerOnly] = useState(false)
@@ -94,19 +108,23 @@ function MapPage() {
   const [showSearchCandidates, setShowSearchCandidates] = useState(false)
   const densityAlertKeysRef = useRef(new Set())
 
+  useEffect(() => {
+    localStorage.setItem('safePinAlertsEnabled', alertsEnabled ? 'true' : 'false')
+  }, [alertsEnabled])
+
   const addAlert = useCallback((alert) => {
-    if (!alert) return
+    if (!alertsEnabled || !alert) return
     const alertId = alert.id || `${alert.type || 'alert'}-${alert.reportId || Date.now()}-${alert.count || 0}`
     setAlerts((prev) => [{ ...alert, id: alertId, receivedAt: new Date().toISOString() }, ...prev].slice(0, 8))
-  }, [])
+  }, [alertsEnabled])
 
   const maybeAddDensityAlert = useCallback((pin, nextPins) => {
     if (!pin) return
-    const count = getNearbyCount(pin, nextPins)
-    if (count < DENSITY_THRESHOLD) return
+    const risk = getRiskScore(pin, nextPins)
+    if (risk.score < DENSITY_THRESHOLD) return
 
     const reportId = getReportId(pin) || `${pin.latitude ?? pin.lat}-${pin.longitude ?? pin.lng}`
-    const key = `${reportId}-${count}`
+    const key = `${reportId}-risk-shown`
     if (densityAlertKeysRef.current.has(key)) return
 
     densityAlertKeysRef.current.add(key)
@@ -115,7 +133,8 @@ function MapPage() {
       reportId,
       title: pin.title || '주변 제보 집중 발생',
       categoryName: pin.categoryName,
-      count,
+      count: risk.count,
+      score: risk.score,
     })
   }, [addAlert])
 
@@ -182,22 +201,16 @@ function MapPage() {
       setLastUpdated(new Date())
     },
     onSympathy: (data) => {
-      setPins((prev) =>
-        prev.map((p) =>
+      setPins((prev) => {
+        const next = prev.map((p) =>
           getReportId(p) === data.reportId
             ? { ...p, sympathyCount: data.count }
             : p
         )
-      )
-      if (data.alertTriggered) {
-        const matched = pins.find((pin) => getReportId(pin) === data.reportId)
-        addAlert({
-          ...data,
-          type: 'sympathy',
-          title: matched?.title || '공감 수가 높은 제보가 있습니다.',
-          categoryName: matched?.categoryName,
-        })
-      }
+        const matched = next.find((pin) => getReportId(pin) === data.reportId)
+        maybeAddDensityAlert(matched, next)
+        return next
+      })
     },
     onAlert: addAlert,
   })
@@ -206,23 +219,16 @@ function MapPage() {
     const data = normalizeItem(result)
     if (!data) return
 
-    setPins((prev) =>
-      prev.map((p) =>
+    setPins((prev) => {
+      const next = prev.map((p) =>
         getReportId(p) === data.reportId
           ? { ...p, sympathyCount: data.count }
           : p
       )
-    )
-
-    if (data.alertTriggered) {
-      const matched = pins.find((pin) => getReportId(pin) === data.reportId)
-      addAlert({
-        ...data,
-        type: 'sympathy',
-        title: matched?.title || '공감 수가 높은 제보가 있습니다.',
-        categoryName: matched?.categoryName,
-      })
-    }
+      const matched = next.find((pin) => getReportId(pin) === data.reportId)
+      maybeAddDensityAlert(matched, next)
+      return next
+    })
   }
 
   const handleResolved = (reportId) => {
@@ -383,6 +389,7 @@ function MapPage() {
             onSearchResult={handleSearchResult}
             heatmapPins={pins}
             focusReportRequest={focusReportRequest}
+            selectedReportId={getReportId(selectedPin)}
           />
         </div>
         <ReportFeed
@@ -391,6 +398,8 @@ function MapPage() {
           onPinSelect={setSelectedPin}
           onPinsUpdate={handlePinsUpdate}
           onResolved={handleResolved}
+          alertsEnabled={alertsEnabled}
+          onToggleAlerts={() => setAlertsEnabled((prev) => !prev)}
         />
       </div>
 

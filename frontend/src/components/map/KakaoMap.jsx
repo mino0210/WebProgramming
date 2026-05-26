@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getReports } from '../../api/reportApi'
 import HeatmapLayer from './HeatmapLayer'
+import { getReportImageUrls } from '../../utils/mediaUrl'
 
 const CATEGORY_COLOR = {
   침수: '#3b82f6',
@@ -70,6 +71,7 @@ function KakaoMap({
   onSearchResult,
   heatmapPins,
   focusReportRequest,
+  selectedReportId,
 }) {
   const mapRef = useRef(null)
   const mapObj = useRef(null)
@@ -89,7 +91,8 @@ function KakaoMap({
       return {
         ...pin,
         nearbyCount,
-        weight: Math.max(nearbyCount, sympathyCount),
+        weight: sympathyCount,
+        riskScore: nearbyCount + sympathyCount,
       }
     })
   }, [heatmapSource])
@@ -225,16 +228,24 @@ ${window.location.href}`)
 
       const color = pin.categoryColor || CATEGORY_COLOR[pin.categoryName] || '#8b5cf6'
       const nearbyCount = getNearbyCount(pin, pins)
+      const reportId = getReportId(pin)
+      const isSelected = selectedReportId != null && reportId != null && String(selectedReportId) === String(reportId)
+      const markerWidth = isSelected ? 44 : 34
+      const markerHeight = isSelected ? 54 : 42
+      const markerAnchorX = markerWidth / 2
+      const markerAnchorY = markerHeight
+      const circleRadius = isSelected ? 9.5 : 7.5
       const svg = `
-        <svg width="34" height="42" viewBox="0 0 34 42" xmlns="http://www.w3.org/2000/svg">
-          <path d="M17 0C7.61 0 0 7.61 0 17c0 11.16 17 25 17 25s17-13.84 17-25C34 7.61 26.39 0 17 0z" fill="${color}"/>
-          <circle cx="17" cy="17" r="7.5" fill="white"/>
+        <svg width="${markerWidth}" height="${markerHeight}" viewBox="0 0 34 42" xmlns="http://www.w3.org/2000/svg">
+          ${isSelected ? `<ellipse cx="17" cy="40" rx="10" ry="3" fill="rgba(15,23,42,0.25)"/>` : ''}
+          <path d="M17 0C7.61 0 0 7.61 0 17c0 11.16 17 25 17 25s17-13.84 17-25C34 7.61 26.39 0 17 0z" fill="${color}" stroke="${isSelected ? '#ffffff' : 'transparent'}" stroke-width="${isSelected ? '2.4' : '0'}"/>
+          <circle cx="17" cy="17" r="${circleRadius}" fill="white"/>
         </svg>`
 
       const markerImage = new kakao.maps.MarkerImage(
         `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-        new kakao.maps.Size(34, 42),
-        { offset: new kakao.maps.Point(17, 42) }
+        new kakao.maps.Size(markerWidth, markerHeight),
+        { offset: new kakao.maps.Point(markerAnchorX, markerAnchorY) }
       )
 
       const marker = new kakao.maps.Marker({
@@ -242,11 +253,12 @@ ${window.location.href}`)
         position: new kakao.maps.LatLng(lat, lng),
         image: markerImage,
         title: pin.title,
+        zIndex: isSelected ? 20 : 5,
       })
 
-      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-      const imageHtml = pin.imageUrls && pin.imageUrls.length > 0
-        ? `<img src="${apiBase}${pin.imageUrls[0]}"
+      const firstImageUrl = getReportImageUrls(pin)[0] || null
+      const imageHtml = firstImageUrl
+        ? `<img src="${firstImageUrl}"
             style="width:100%;border-radius:8px;margin-top:8px;max-height:140px;object-fit:cover;"
             onerror="this.style.display='none'" />`
         : ''
@@ -285,10 +297,9 @@ ${window.location.href}`)
       })
 
       markers.current.push(marker)
-      const reportId = getReportId(pin)
       if (reportId != null) markerMapRef.current.set(String(reportId), { marker, infowindow, pin })
     })
-  }, [pins, onPinClick])
+  }, [pins, onPinClick, selectedReportId])
 
   useEffect(() => {
     if (!focusReportRequest || !mapObj.current || !window.kakao?.maps) return

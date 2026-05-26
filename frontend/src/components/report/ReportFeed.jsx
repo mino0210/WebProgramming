@@ -1,19 +1,44 @@
 import { useEffect, useState } from 'react'
 import ReportCard from './ReportCard'
 import SympathyButton from '../sympathy/SympathyButton'
-
-const CATEGORY_COLOR = {
-  침수: '#3b82f6',
-  화재: '#ef4444',
-  교통: '#f59e0b',
-  낙석: '#78716c',
-  정전: '#eab308',
-  가스누출: '#22c55e',
-}
+import { getReportImageUrls } from '../../utils/mediaUrl'
+import { CategoryIcon, getCategoryMeta } from '../../utils/categoryMeta'
 
 const getReportId = (report) => report?.reportId ?? report?.id
 const getLat = (report) => Number(report?.latitude ?? report?.lat)
 const getLng = (report) => Number(report?.longitude ?? report?.lng)
+
+
+const mergeUniqueList = (...lists) => {
+  const merged = []
+  lists.flat().filter(Boolean).forEach((item) => {
+    const key = typeof item === 'string' ? item : JSON.stringify(item)
+    if (!merged.some((existing) => (typeof existing === 'string' ? existing : JSON.stringify(existing)) === key)) {
+      merged.push(item)
+    }
+  })
+  return merged
+}
+
+const mergeReportWithFullData = (target, pins) => {
+  if (!target) return null
+  const targetId = getReportId(target)
+  const fullReport = targetId != null
+    ? pins.find((pin) => String(getReportId(pin)) === String(targetId))
+    : null
+
+  const imageUrls = mergeUniqueList(fullReport?.imageUrls || [], target?.imageUrls || [])
+  const images = mergeUniqueList(fullReport?.images || [], target?.images || [])
+  const reportImages = mergeUniqueList(fullReport?.reportImages || [], target?.reportImages || [])
+
+  return {
+    ...(fullReport || {}),
+    ...target,
+    imageUrls,
+    images,
+    reportImages,
+  }
+}
 
 const buildKakaoRouteUrl = (report) => {
   const lat = getLat(report)
@@ -21,6 +46,71 @@ const buildKakaoRouteUrl = (report) => {
   const title = encodeURIComponent(report?.title || report?.categoryName || 'SafePin 제보 위치')
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
   return `https://map.kakao.com/link/to/${title},${lat},${lng}`
+}
+
+
+const buildImageFallbacks = (url) => {
+  if (!url) return []
+  const values = [url]
+
+  try {
+    const parsed = new URL(url, window.location.href)
+    const currentHost = window.location.hostname
+    const path = parsed.pathname
+
+    if (path.startsWith('/images/')) {
+      values.push(`${window.location.protocol}//${currentHost}:8080${path}`)
+      values.push(`${parsed.protocol}//${parsed.hostname}:8080${path}`)
+    }
+
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+      values.push(`${parsed.protocol}//${currentHost}:8080${path}`)
+    }
+  } catch {
+    if (String(url).startsWith('/images/')) {
+      values.push(`${window.location.protocol}//${window.location.hostname}:8080${url}`)
+    }
+  }
+
+  return Array.from(new Set(values.filter(Boolean)))
+}
+
+function GalleryImage({ src, alt = '제보 이미지', style, fallbackStyle }) {
+  const [sourceIndex, setSourceIndex] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const candidates = buildImageFallbacks(src)
+  const currentSrc = candidates[sourceIndex]
+
+  useEffect(() => {
+    setSourceIndex(0)
+    setFailed(false)
+  }, [src])
+
+  if (!currentSrc || failed) {
+    return (
+      <div style={{ ...styles.imageFallback, ...(fallbackStyle || {}) }}>
+        <span style={{ fontSize: '18px' }}>🖼️</span>
+        <span>이미지를 불러오지 못했습니다</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      alt={alt}
+      style={style}
+      loading="lazy"
+      onError={() => {
+        if (sourceIndex < candidates.length - 1) {
+          setSourceIndex((prev) => prev + 1)
+          return
+        }
+        console.warn('[SafePin] 제보 이미지 로딩 실패:', candidates)
+        setFailed(true)
+      }}
+    />
+  )
 }
 
 const buildShareText = (report) => {
@@ -35,16 +125,17 @@ const buildShareText = (report) => {
   return `${category}${title}${content}${location}`
 }
 
-function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResolved }) {
+function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResolved, alertsEnabled = true, onToggleAlerts }) {
   const [selected, setSelected] = useState(null)
+  const [imageIndex, setImageIndex] = useState(0)
   const [actionMessage, setActionMessage] = useState('')
   const memberId = localStorage.getItem('memberId')
-  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
   useEffect(() => {
     if (!selectedPin) return
-    setSelected(selectedPin)
-  }, [selectedPin])
+    setSelected(mergeReportWithFullData(selectedPin, pins))
+    setImageIndex(0)
+  }, [selectedPin, pins])
 
   useEffect(() => {
     if (!actionMessage) return undefined
@@ -55,8 +146,9 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
   const handleCardClick = (report) => {
     const currentId = getReportId(selected)
     const nextId = getReportId(report)
-    const next = currentId === nextId ? null : report
+    const next = currentId === nextId ? null : mergeReportWithFullData(report, pins)
     setSelected(next)
+    setImageIndex(0)
     onPinSelect?.(next)
   }
 
@@ -71,10 +163,10 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
   }
 
   const handleShare = async () => {
-    if (!selected) return
-    const text = buildShareText(selected)
+    if (!selectedDetail) return
+    const text = buildShareText(selectedDetail)
     const shareData = {
-      title: selected.title || 'SafePin 재난 제보',
+      title: selectedDetail.title || 'SafePin 재난 제보',
       text,
       url: window.location.href,
     }
@@ -95,8 +187,8 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
   }
 
   const handleRoute = () => {
-    if (!selected) return
-    const url = buildKakaoRouteUrl(selected)
+    if (!selectedDetail) return
+    const url = buildKakaoRouteUrl(selectedDetail)
     if (!url) {
       setActionMessage('위치 정보가 없어 경로를 열 수 없습니다.')
       return
@@ -104,45 +196,93 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const color = selected ? (selected.categoryColor || CATEGORY_COLOR[selected.categoryName] || '#8b5cf6') : '#8b5cf6'
-  const selectedLat = getLat(selected)
-  const selectedLng = getLng(selected)
+  const selectedDetail = mergeReportWithFullData(selected, pins)
+  const categoryMeta = selectedDetail ? getCategoryMeta(selectedDetail.categoryName) : getCategoryMeta('기타')
+  const color = selectedDetail ? (selectedDetail.categoryColor || categoryMeta.color) : categoryMeta.color
+  const selectedLat = getLat(selectedDetail)
+  const selectedLng = getLng(selectedDetail)
   const selectedLocationText = Number.isFinite(selectedLat) && Number.isFinite(selectedLng)
     ? `${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)}`
     : '위치 정보 없음'
+  const selectedImageUrls = getReportImageUrls(selectedDetail)
+  const safeImageIndex = selectedImageUrls.length > 0 ? Math.min(imageIndex, selectedImageUrls.length - 1) : 0
+  const currentImageUrl = selectedImageUrls[safeImageIndex]
 
   return (
     <div className="report-feed-wrapper" style={styles.wrapper}>
-      {selected && (
+      {selectedDetail && (
         <div className="report-detail" style={styles.detail}>
           <div style={styles.detailHeader}>
             <div style={styles.detailHeaderLeft}>
               <span style={{ ...styles.detailBadge, background: color }}>
-                {selected.categoryName || '기타'}
+                <CategoryIcon name={selectedDetail.categoryName || '기타'} size={13} background={false} style={{ color: '#fff', width: 18, height: 18, minWidth: 18 }} />
+                {selectedDetail.categoryName || '기타'}
               </span>
-              {Number(selected.sympathyCount || 0) >= 3 && <span style={styles.hotBadge}>위험지역</span>}
+              {Number(selectedDetail.sympathyCount || 0) >= 3 && <span style={styles.hotBadge}>위험지역</span>}
             </div>
             <button style={styles.detailClose} onClick={() => { setSelected(null); onPinSelect?.(null) }}>✕</button>
           </div>
 
-          <div style={styles.detailTitle}>{selected.title}</div>
+          <div style={styles.detailTitle}>{selectedDetail.title}</div>
           <div style={styles.detailMetaGrid}>
-            <span>🕐 {selected.createdAt ? new Date(selected.createdAt).toLocaleString('ko-KR') : '시간 정보 없음'}</span>
+            <span>🕐 {selectedDetail.createdAt ? new Date(selectedDetail.createdAt).toLocaleString('ko-KR') : '시간 정보 없음'}</span>
             <span>📍 {selectedLocationText}</span>
           </div>
-          <div style={styles.detailContent}>{selected.content}</div>
+          <div style={styles.detailContent}>{selectedDetail.content}</div>
 
-          {selected.imageUrls && selected.imageUrls.length > 0 && (
+          {selectedImageUrls.length > 0 && (
             <div style={styles.detailImages}>
-              {selected.imageUrls.map((url, i) => (
-                <img
-                  key={`${url}-${i}`}
-                  src={`${apiBase}${url}`}
+              <div style={styles.imageViewer}>
+                <GalleryImage
+                  key={currentImageUrl}
+                  src={currentImageUrl}
                   alt="제보 이미지"
                   style={styles.detailImage}
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  fallbackStyle={{ minHeight: '180px' }}
                 />
-              ))}
+                {selectedImageUrls.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      style={{ ...styles.imageNavBtn, left: '8px' }}
+                      onClick={() => setImageIndex((prev) => (prev - 1 + selectedImageUrls.length) % selectedImageUrls.length)}
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...styles.imageNavBtn, right: '8px' }}
+                      onClick={() => setImageIndex((prev) => (prev + 1) % selectedImageUrls.length)}
+                    >
+                      ›
+                    </button>
+                    <div style={styles.imageCounter}>{safeImageIndex + 1} / {selectedImageUrls.length}</div>
+                  </>
+                )}
+              </div>
+              {selectedImageUrls.length > 1 && (
+                <div style={styles.thumbnailRow}>
+                  {selectedImageUrls.map((url, i) => (
+                    <button
+                      key={`${url}-thumb-${i}`}
+                      type="button"
+                      style={{
+                        ...styles.thumbnailBtn,
+                        borderColor: i === safeImageIndex ? '#2563eb' : '#e2e8f0',
+                        opacity: i === safeImageIndex ? 1 : 0.68,
+                      }}
+                      onClick={() => setImageIndex(i)}
+                    >
+                      <GalleryImage
+                        src={url}
+                        alt={`제보 이미지 ${i + 1}`}
+                        style={styles.thumbnailImage}
+                        fallbackStyle={{ width: '100%', height: '100%', fontSize: '0', padding: 0, gap: 0 }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -154,9 +294,9 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
 
           <div style={styles.detailFooter}>
             <SympathyButton
-              reportId={getReportId(selected)}
+              reportId={getReportId(selectedDetail)}
               memberId={memberId}
-              count={selected.sympathyCount || 0}
+              count={selectedDetail.sympathyCount || 0}
               onChanged={handleSympathyChanged}
             />
             <span style={styles.detailHint}>공감 3개 이상 또는 근처 제보 집중 시 위험지역으로 표시됩니다.</span>
@@ -185,7 +325,7 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
           ) : (
             pins.map((report) => {
               const reportId = getReportId(report)
-              const isSelected = getReportId(selected) === reportId
+              const isSelected = getReportId(selectedDetail) === reportId
               return (
                 <div
                   key={reportId}
@@ -205,12 +345,12 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
           )}
         </div>
 
-        <div style={styles.alertRow}>
-          <span style={styles.alertText}>🔔 실시간 제보 알림 수신 중</span>
-          <div style={styles.toggle}>
-            <div style={styles.toggleKnob} />
+        <button type="button" style={styles.alertRow} onClick={onToggleAlerts}>
+          <span style={styles.alertText}>{alertsEnabled ? '🔔 실시간 제보 알림 수신 중' : '🔕 실시간 제보 알림 꺼짐'}</span>
+          <div style={{ ...styles.toggle, background: alertsEnabled ? '#2563eb' : '#cbd5e1' }}>
+            <div style={{ ...styles.toggleKnob, right: alertsEnabled ? '3px' : '23px' }} />
           </div>
-        </div>
+        </button>
       </div>
     </div>
   )
@@ -238,7 +378,7 @@ const styles = {
   detailHeaderLeft: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
   detailBadge: {
     color: '#fff', fontSize: '12px', fontWeight: '900',
-    padding: '4px 10px', borderRadius: '999px',
+    padding: '4px 10px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px',
   },
   hotBadge: {
     color: '#ea580c', background: '#fff7ed', border: '1px solid #fed7aa',
@@ -256,8 +396,28 @@ const styles = {
     padding: '10px 12px', borderRadius: '12px', background: '#f8fafc',
   },
   detailContent: { fontSize: '15px', fontWeight: '650', color: '#475569', lineHeight: 1.65, whiteSpace: 'pre-wrap' },
-  detailImages: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  detailImage: { width: '100%', borderRadius: '12px', maxHeight: '190px', objectFit: 'cover' },
+  detailImages: { display: 'flex', flexDirection: 'column', gap: '9px' },
+  imageViewer: { position: 'relative', width: '100%', borderRadius: '12px', overflow: 'hidden', background: '#f8fafc' },
+  detailImage: { width: '100%', borderRadius: '12px', maxHeight: '210px', objectFit: 'cover', display: 'block' },
+  imageFallback: {
+    minHeight: '160px', width: '100%', borderRadius: '12px', background: '#f8fafc',
+    border: '1px dashed #cbd5e1', color: '#94a3b8', display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', fontWeight: '800',
+  },
+  imageNavBtn: {
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+    width: '34px', height: '34px', borderRadius: '50%', border: 'none',
+    background: 'rgba(15,23,42,0.58)', color: '#fff', fontSize: '24px', fontWeight: '900',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  imageCounter: {
+    position: 'absolute', right: '10px', bottom: '9px',
+    padding: '4px 8px', borderRadius: '999px', background: 'rgba(15,23,42,0.66)',
+    color: '#fff', fontSize: '12px', fontWeight: '900',
+  },
+  thumbnailRow: { display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' },
+  thumbnailBtn: { width: '48px', height: '42px', flex: '0 0 auto', border: '2px solid #e2e8f0', borderRadius: '9px', padding: 0, overflow: 'hidden', background: '#fff', cursor: 'pointer' },
+  thumbnailImage: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
   actionGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' },
   primaryActionBtn: {
     border: 'none', borderRadius: '11px', background: '#2563eb', color: '#fff',
@@ -297,12 +457,12 @@ const styles = {
   },
   alertRow: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 16px', borderTop: '1px solid #f1f5f9',
-    flexShrink: 0, background: '#f8fafc',
+    width: '100%', padding: '12px 16px', border: 'none', borderTop: '1px solid #f1f5f9',
+    flexShrink: 0, background: '#f8fafc', cursor: 'pointer',
   },
   alertText: { fontSize: '14px', color: '#374151', fontWeight: '600' },
   toggle: { width: '46px', height: '26px', borderRadius: '12px', background: '#2563eb', position: 'relative', cursor: 'pointer' },
-  toggleKnob: { position: 'absolute', right: '3px', top: '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff' },
+  toggleKnob: { position: 'absolute', top: '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff', transition: 'right 0.16s ease' },
 }
 
 export default ReportFeed

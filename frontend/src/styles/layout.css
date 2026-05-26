@@ -1262,3 +1262,473 @@ button {
     padding: 12px !important;
   }
 }
+
+/* =====================================================
+   SafePin mobile-only responsive polish
+   - Desktop/tablet layout remains unchanged.
+   - Applied only below 768px to fix real mobile browser overflow.
+   ===================================================== */
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  body {
+    font-size: 14px !important;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  img,
+  svg,
+  canvas,
+  iframe {
+    max-width: 100%;
+  }
+
+  /* Header: keep brand visible, make menus horizontally scrollable instead of overflowing. */
+  .app-header {
+    height: auto !important;
+    min-height: 64px !important;
+    padding: 10px 14px 8px !important;
+    gap: 10px !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 500 !important;
+  }
+
+  .app-header__logo {
+    gap: 8px !important;
+    min-width: 0 !important;
+  }
+
+  .app-header__logo svg {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .app-header__logo-text {
+    font-size: 18px !important;
+    letter-spacing: -0.2px !important;
+  }
+
+  .app-header__right {
+    margin-left: auto !important;
+    gap: 4px !important;
+  }
+
+  .app-header__icon-btn {
+    padding: 7px 9px !important;
+    font-size: 13px !important;
+    white-space: nowrap !important;
+  }
+
+  .app-header__nav {
+    order: 3 !important;
+    width: 100% !important;
+    flex: 0 0 100% !important;
+    display: flex !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    white-space: nowrap !important;
+    padding: 2px 0 0 !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .app-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-header__nav-item {
+    height: 38px !important;
+    padding: 0 13px !important;
+    font-size: 14px !important;
+    border-radius: 12px !important;
+    flex: 0 0 auto !important;
+    border-bottom-width: 0 !important;
+  }
+
+  .app-header__alert-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: 74px !important;
+    width: auto !important;
+    max-height: calc(100dvh - 96px) !important;
+  }
+
+  /* Map main page: stack controls and keep map/feed in a usable order. */
+  .map-page {
+    min-height: 100dvh !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .search-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    padding: 12px !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+
+  .search-box {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    flex: none !important;
+    height: 48px !important;
+    min-width: 0 !important;
+    border-radius: 14px !important;
+  }
+
+  .search-box input {
+    min-width: 0 !important;
+    font-size: 14px !important;
+  }
+
+  .search-row > button {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 46px !important;
+    padding: 0 12px !important;
+    border-radius: 14px !important;
+    font-size: 14px !important;
+    justify-content: center !important;
+  }
+
+  .category-filter {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 10px 12px 12px !important;
+    overflow: hidden !important;
+  }
+
+  .category-filter > div:first-child {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    width: 100% !important;
+    padding-bottom: 4px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .category-filter > div:first-child::-webkit-scrollbar {
+    display: none;
+  }
+
+  .category-filter > div:first-child > button {
+    flex: 0 0 auto !important;
+    padding: 9px 15px !important;
+    font-size: 14px !important;
+  }
+
+  .category-filter > div:last-child {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    font-size: 13px !important;
+  }
+
+  .main-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 12px !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .map-panel {
+    width: 100% !important;
+    flex: none !important;
+    height: 52dvh !important;
+    min-height: 380px !important;
+    border-radius: 18px !important;
+  }
+
+  .kakao-map,
+  .kakao-map-shell {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 380px !important;
+  }
+
+  .report-feed-wrapper {
+    width: 100% !important;
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .report-feed-wrapper .report-feed,
+  .report-feed {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 280px !important;
+    max-height: none !important;
+    border-left: 0 !important;
+    border-top: 1px solid #e5e7eb !important;
+  }
+
+  .app-footer {
+    display: none !important;
+  }
+
+  /* Reports page: one clean column, no horizontal overflow. */
+  .reports-page {
+    overflow-x: hidden !important;
+  }
+
+  .reports-page-inner {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 14px 14px 36px !important;
+    margin: 0 !important;
+  }
+
+  .reports-hero {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 18px !important;
+    padding: 22px 18px !important;
+    border-radius: 22px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .reports-hero h1 {
+    font-size: 22px !important;
+    line-height: 1.35 !important;
+  }
+
+  .reports-hero p {
+    max-width: none !important;
+    font-size: 14px !important;
+    line-height: 1.75 !important;
+  }
+
+  .reports-hero-btn {
+    width: 100% !important;
+    height: 46px !important;
+  }
+
+  .reports-summary-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .reports-summary-card {
+    min-height: 96px !important;
+    padding: 18px !important;
+    gap: 16px !important;
+  }
+
+  .reports-summary-icon {
+    width: 54px !important;
+    height: 54px !important;
+    border-radius: 16px !important;
+  }
+
+  .reports-summary-value {
+    font-size: 28px !important;
+  }
+
+  .reports-filter-panel {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    padding: 16px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .reports-search-box,
+  .reports-sort-group select,
+  .reports-reset-btn {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .reports-chip-row {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .reports-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reports-chip {
+    flex: 0 0 auto !important;
+  }
+
+  .reports-content-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  .reports-list-column,
+  .reports-side-column {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+  }
+
+  .reports-history-card {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    padding: 16px !important;
+    min-height: 0 !important;
+  }
+
+  .reports-history-thumb {
+    width: 100% !important;
+    height: 170px !important;
+  }
+
+  .reports-card-actions {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+  }
+
+  .reports-ghost-btn,
+  .reports-resolve-btn,
+  .reports-done-mark {
+    width: 100% !important;
+  }
+
+  .reports-donut-row {
+    grid-template-columns: 110px minmax(0, 1fr) !important;
+  }
+
+  /* Guide page: prevent 3-column cards from becoming vertical text columns. */
+  .guide-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 16px 14px 36px !important;
+    margin: 0 !important;
+  }
+
+  .guide-hero {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 18px !important;
+    padding: 22px 18px !important;
+    border-radius: 22px !important;
+  }
+
+  .guide-hero h1 {
+    font-size: 24px !important;
+    line-height: 1.35 !important;
+  }
+
+  .guide-hero p {
+    max-width: none !important;
+    font-size: 14px !important;
+    line-height: 1.75 !important;
+  }
+
+  .guide-hero button {
+    width: 100% !important;
+    height: 46px !important;
+  }
+
+  .guide-steps-grid,
+  .guide-category-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .guide-step-card,
+  .guide-category-card,
+  .guide-info-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-radius: 18px !important;
+  }
+
+  .guide-category-card,
+  .guide-step-card {
+    padding: 17px !important;
+  }
+
+  .guide-category-card * {
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+  }
+
+  .guide-category-card h3 {
+    font-size: 17px !important;
+  }
+
+  .guide-category-card p,
+  .guide-category-card div {
+    line-height: 1.65 !important;
+  }
+
+  .guide-info-panel {
+    padding: 22px 18px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-header__logo-text {
+    font-size: 17px !important;
+  }
+
+  .app-header__icon-btn {
+    font-size: 12px !important;
+    padding: 6px 7px !important;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .search-row > button {
+    grid-column: auto !important;
+  }
+
+  .map-panel {
+    height: 50dvh !important;
+    min-height: 340px !important;
+  }
+
+  .kakao-map,
+  .kakao-map-shell {
+    min-height: 340px !important;
+  }
+
+  .reports-page-inner,
+  .guide-main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .reports-card-actions {
+    grid-template-columns: 1fr !important;
+  }
+}

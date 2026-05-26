@@ -68,10 +68,10 @@ function DisasterGuidePage() {
   const navigate = useNavigate()
 
   return (
-    <div style={styles.page}>
+    <div className="guide-page" style={styles.page}>
       <Header />
-      <main style={styles.main}>
-        <section style={styles.hero}>
+      <main className="guide-main" style={styles.main}>
+        <section className="guide-hero" style={styles.hero}>
           <div>
             <span style={styles.eyebrow}>SafePin Guide</span>
             <h1 style={styles.title}>재난 상황, 빠르게 보고 안전하게 공유하세요</h1>
@@ -83,16 +83,16 @@ function DisasterGuidePage() {
           <button style={styles.primaryBtn} onClick={() => navigate('/')}>지도에서 제보하기</button>
         </section>
 
-        <section style={styles.stepsGrid}>
+        <section className="guide-steps-grid" style={styles.stepsGrid}>
           {guideSteps.map((step) => (
-            <article key={step.title} style={styles.stepCard}>
+            <article key={step.title} className="guide-step-card" style={styles.stepCard}>
               <div style={styles.stepTitle}>{step.title}</div>
               <p style={styles.stepBody}>{step.body}</p>
             </article>
           ))}
         </section>
 
-        <section style={styles.infoPanel}>
+        <section className="guide-info-panel" style={styles.infoPanel}>
           <div style={styles.panelHeader}>
             <h2 style={styles.sectionTitle}>재난이란?</h2>
             <span style={styles.panelTag}>생활 안전 중심</span>
@@ -108,9 +108,9 @@ function DisasterGuidePage() {
             <h2 style={styles.sectionTitle}>카테고리별 대표 사례와 행동 요령</h2>
             <p style={styles.sectionDesc}>제보를 등록할 때 가장 가까운 유형을 선택하면 지도와 통계에서 더 정확하게 분류됩니다.</p>
           </div>
-          <div style={styles.categoryGrid}>
+          <div className="guide-category-grid" style={styles.categoryGrid}>
             {categories.map((item) => (
-              <article key={item.name} style={styles.categoryCard}>
+              <article key={item.name} className="guide-category-card" style={styles.categoryCard}>
                 <div style={styles.categoryTop}>
                   <span style={{ ...styles.categoryIcon, background: item.bg, color: item.color }}>{item.icon}</span>
                   <div>

@@ -1,17 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '../components/common/Header'
-import { getAllReports, getCategories } from '../api/reportApi'
-
-const CATEGORY_META = {
-  침수: { color: '#3b82f6', bg: '#eff6ff', icon: '💧' },
-  화재: { color: '#ef4444', bg: '#fef2f2', icon: '🔥' },
-  교통: { color: '#f59e0b', bg: '#fffbeb', icon: '🚗' },
-  낙석: { color: '#78716c', bg: '#f5f5f4', icon: '⛰️' },
-  정전: { color: '#eab308', bg: '#fefce8', icon: '⚡' },
-  가스누출: { color: '#22c55e', bg: '#f0fdf4', icon: '🟢' },
-  기타: { color: '#8b5cf6', bg: '#f5f3ff', icon: '📌' },
-}
+import { getCategories } from '../api/reportApi'
+import { getAllReports } from '../api/reportApi'
+import { CATEGORY_META } from '../utils/categoryMeta'
 
 const normalizeList = (res) => res?.data?.data ?? res?.data ?? res ?? []
 const getReportId = (pin) => pin?.reportId ?? pin?.id
@@ -138,7 +130,7 @@ function StatsPage() {
                 return (
                   <div key={item.name} style={s.barRow}>
                     <div style={s.barLabel}>
-                      <span style={{ ...s.smallIcon, background: meta.bg, color: meta.color }}>{meta.icon}</span>
+                      <span style={{ ...s.smallIcon, background: meta.bg, color: meta.color }}>{meta.iconText}</span>
                       <span>{item.name}</span>
                     </div>
                     <div style={s.barTrack} title={`${item.name} ${item.count}건`}>
@@ -197,7 +189,7 @@ function StatsPage() {
                 const resolved = isResolvedReport(report)
                 return (
                   <div key={getReportId(report)} style={s.timelineItem}>
-                    <span style={{ ...s.timelineIcon, background: meta.bg, color: meta.color }}>{meta.icon}</span>
+                    <span style={{ ...s.timelineIcon, background: meta.bg, color: meta.color }}>{meta.iconText}</span>
                     <div style={s.timelineBody}>
                       <div style={s.timelineTop}>
                         <strong>{report.title || '제목 없음'}</strong>

@@ -2,39 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '../components/common/Header'
 import { getAllReports, resolveReport } from '../api/reportApi'
+import { CATEGORY_META } from '../utils/categoryMeta'
+import { getReportImageUrls } from '../utils/mediaUrl'
+import ReportImagePreview from '../components/common/ReportImagePreview'
 
 const DEFAULT_CATEGORIES = ['전체', '침수', '화재', '교통', '낙석', '정전', '가스누출', '기타']
-
-const CATEGORY_META = {
-  침수: {
-    label: '침수', color: '#3b82f6', bg: '#eff6ff', iconText: '💧',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2C20 10.48 17.33 6.55 12 2z"/></svg>,
-  },
-  화재: {
-    label: '화재', color: '#ef4444', bg: '#fef2f2', iconText: '🔥',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>,
-  },
-  교통: {
-    label: '교통', color: '#f59e0b', bg: '#fffbeb', iconText: '🚗',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>,
-  },
-  낙석: {
-    label: '낙석', color: '#78716c', bg: '#f5f5f4', iconText: '⛰️',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 20h20L12 2z"/><circle cx="15" cy="11" r="1.5" fill={c}/><circle cx="10" cy="16" r="1" fill={c}/></svg>,
-  },
-  정전: {
-    label: '정전', color: '#eab308', bg: '#fefce8', iconText: '⚡',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>,
-  },
-  가스누출: {
-    label: '가스누출', color: '#22c55e', bg: '#f0fdf4', iconText: '☁️',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18h18M8 18V9h8v9"/><circle cx="12" cy="6" r="1.5"/><circle cx="16" cy="4" r="1"/><circle cx="8" cy="4" r="1"/></svg>,
-  },
-  기타: {
-    label: '기타', color: '#64748b', bg: '#f1f5f9', iconText: '●',
-    icon: (c) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>,
-  },
-}
 
 const statusMeta = {
   all: { label: '전체', color: '#2563eb', bg: '#eff6ff' },
@@ -99,11 +71,8 @@ function isResolvedReport(report) {
   return report.status === 'RESOLVED' || report.resolved === true
 }
 
-function getImageUrl(report, apiBase) {
-  const first = report.imageUrls?.[0] || report.imageUrl || report.imagePath
-  if (!first) return null
-  if (String(first).startsWith('http')) return first
-  return `${apiBase}${String(first).startsWith('/') ? first : `/${first}`}`
+function getImageUrls(report) {
+  return getReportImageUrls(report)
 }
 
 function SummaryCard({ type, icon, label, value, description }) {
@@ -123,7 +92,6 @@ function MyReportsPage() {
   const navigate = useNavigate()
   const memberId = localStorage.getItem('memberId')
   const nickname = localStorage.getItem('nickname') || '사용자'
-  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
@@ -246,14 +214,27 @@ function MyReportsPage() {
     const meta = CATEGORY_META[categoryName] || CATEGORY_META.기타
     const reportId = getReportId(report)
     const isResolved = isResolvedReport(report)
-    const imageUrl = getImageUrl(report, apiBase)
+    const imageUrls = getImageUrls(report)
+    const hasImage = imageUrls.length > 0
     const locationText = report.address || report.locationName || report.region || '위치 정보 없음'
 
     return (
       <article key={reportId} className={`reports-history-card ${isResolved ? 'is-resolved' : ''}`}>
         <div className="reports-history-thumb">
-          {imageUrl ? (
-            <img src={imageUrl} alt="제보 이미지" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+          {hasImage ? (
+            <ReportImagePreview
+              sources={imageUrls}
+              alt="제보 이미지"
+              fallback={(
+                <div className="reports-history-empty-thumb">
+                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <circle cx="8" cy="9" r="1.6" />
+                    <path d="M21 16l-5.5-5.5L7 19" />
+                  </svg>
+                </div>
+              )}
+            />
           ) : (
             <div className="reports-history-empty-thumb">
               <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">

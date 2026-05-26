@@ -1,17 +1,10 @@
 import { useState, useEffect } from 'react'
 import { createReport, getCategories } from '../../api/reportApi'
-
-const CATEGORY_META = {
-  침수:    { color: '#3b82f6', bg: '#eff6ff' },
-  화재:    { color: '#ef4444', bg: '#fef2f2' },
-  교통:    { color: '#f59e0b', bg: '#fffbeb' },
-  낙석:    { color: '#78716c', bg: '#f5f5f4' },
-  정전:    { color: '#eab308', bg: '#fefce8' },
-  가스누출: { color: '#22c55e', bg: '#f0fdf4' },
-}
+import { CategoryIcon, getCategoryMeta } from '../../utils/categoryMeta'
 
 const MAX_IMAGE_SIZE = 2.5 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 1600
+const MAX_IMAGE_COUNT = 5
 
 function getSafeImageName(file) {
   const base = file?.name?.replace(/\.[^.]+$/, '') || 'report-image'
@@ -76,7 +69,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
   const [title, setTitle]           = useState('')
   const [content, setContent]       = useState('')
   const [categoryId, setCategoryId] = useState('')
-  const [image, setImage]           = useState(null)
+  const [images, setImages]         = useState([])
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
 
@@ -87,7 +80,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
   }, [])
 
   const selectedCat = categories.find((c) => String(c.id) === String(categoryId))
-  const catMeta = selectedCat ? (CATEGORY_META[selectedCat.name] || { color: '#1d4ed8', bg: '#eff6ff' }) : { color: '#1d4ed8', bg: '#eff6ff' }
+  const catMeta = selectedCat ? getCategoryMeta(selectedCat.name) : { color: '#1d4ed8', bg: '#eff6ff' }
 
   const handleSubmit = async () => {
     if (!title.trim())   return setError('제목을 입력해주세요.')
@@ -106,14 +99,18 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
         latitude: Number(latLng.lat),
         longitude: Number(latLng.lng),
       }))
-      if (image) {
-        const uploadImage = await compressImage(image)
-        if (uploadImage.size > 10 * 1024 * 1024) {
+      if (images.length > 0) {
+        const compressedImages = await Promise.all(images.map((file) => compressImage(file)))
+        const tooLarge = compressedImages.find((file) => file.size > 10 * 1024 * 1024)
+        if (tooLarge) {
           setError('사진 용량이 너무 큽니다. 10MB 이하 이미지로 다시 선택해주세요.')
           setLoading(false)
           return
         }
-        formData.append('images', uploadImage, uploadImage.name || image.name || 'report-image.jpg')
+        compressedImages.forEach((uploadImage, index) => {
+          const original = images[index]
+          formData.append('images', uploadImage, uploadImage.name || original?.name || `report-image-${index + 1}.jpg`)
+        })
       }
       const res = await createReport(formData, memberId)
       const saved = res.data?.data ?? res.data ?? res
@@ -126,6 +123,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
         categoryName: saved?.categoryName ?? selectedCat?.name,
         title: saved?.title ?? title,
         content: saved?.content ?? content,
+        imageUrls: saved?.imageUrls ?? [],
         sympathyCount: saved?.sympathyCount ?? 0,
       })
       onClose()
@@ -170,7 +168,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
             <label style={styles.label}>재난 유형</label>
             <div style={styles.catGrid}>
               {categories.map((cat) => {
-                const meta = CATEGORY_META[cat.name] || { color: '#6b7280', bg: '#f3f4f6' }
+                const meta = getCategoryMeta(cat.name)
                 const isActive = String(categoryId) === String(cat.id)
                 return (
                     <button key={cat.id} type="button"
@@ -183,6 +181,7 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
                             }}
                             onClick={() => setCategoryId(cat.id)}
                     >
+                      <CategoryIcon name={cat.name} size={15} background={false} style={{ width: 20, height: 20, minWidth: 20 }} />
                       {cat.name}
                     </button>
                 )
@@ -201,10 +200,52 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
             <label style={styles.label}>
               사진 첨부 <span style={{ color: '#9ca3af', fontWeight: 700 }}>(선택)</span>
             </label>
-            {image ? (
-                <div style={{ position: 'relative' }}>
-                  <img src={URL.createObjectURL(image)} alt="미리보기" style={styles.preview} />
-                  <button style={styles.removeImg} onClick={() => setImage(null)}>✕</button>
+            {images.length > 0 ? (
+                <div style={styles.previewList}>
+                  {images.map((file, index) => {
+                    const previewUrl = URL.createObjectURL(file)
+                    return (
+                      <div key={`${file.name}-${file.size}-${index}`} style={styles.previewItem}>
+                        <img
+                          src={previewUrl}
+                          alt={`미리보기 ${index + 1}`}
+                          style={styles.preview}
+                          onLoad={() => URL.revokeObjectURL(previewUrl)}
+                        />
+                        <button
+                          type="button"
+                          style={styles.removeImg}
+                          onClick={() => setImages((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          ✕
+                        </button>
+                        <span style={styles.previewCount}>{index + 1}</span>
+                      </div>
+                    )
+                  })}
+                  {images.length < MAX_IMAGE_COUNT && (
+                    <label style={{ ...styles.fileLabel, minHeight: '86px' }}>
+                      <span style={{ fontSize: '21px', color: '#94a3b8' }}>＋</span>
+                      <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 800 }}>사진 추가</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const selectedFiles = Array.from(e.target.files || [])
+                          const onlyImages = selectedFiles.filter((file) => file.type.startsWith('image/'))
+                          if (onlyImages.length !== selectedFiles.length) {
+                            setError('이미지 파일만 업로드할 수 있습니다.')
+                          } else {
+                            setError('')
+                          }
+                          setImages((prev) => [...prev, ...onlyImages].slice(0, MAX_IMAGE_COUNT))
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
             ) : (
                 <label style={styles.fileLabel}>
@@ -213,19 +254,22 @@ function ReportModal({ latLng, onClose, onSubmitted }) {
                     <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
                   <span style={{ fontSize: '16px', color: '#9ca3af' }}>클릭하여 사진 업로드</span>
+                  <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 700 }}>최대 {MAX_IMAGE_COUNT}장까지 등록할 수 있습니다.</span>
                   <input
                     type="file"
                     accept="image/*"
+                    multiple
                     style={{ display: 'none' }}
                     onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (!file.type.startsWith('image/')) {
+                      const selectedFiles = Array.from(e.target.files || [])
+                      const onlyImages = selectedFiles.filter((file) => file.type.startsWith('image/'))
+                      if (onlyImages.length !== selectedFiles.length) {
                         setError('이미지 파일만 업로드할 수 있습니다.')
-                        return
+                      } else {
+                        setError('')
                       }
-                      setError('')
-                      setImage(file)
+                      setImages(onlyImages.slice(0, MAX_IMAGE_COUNT))
+                      e.target.value = ''
                     }}
                   />
                 </label>
@@ -280,7 +324,7 @@ const styles = {
   body: { padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto' },
   label: { fontSize: '15px', fontWeight: '700', color: '#374151', marginTop: '8px' },
   catGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' },
-  catBtn: { padding: '8px 4px', borderRadius: '8px', fontSize: '15px', cursor: 'pointer', transition: 'all 0.12s', textAlign: 'center' },
+  catBtn: { padding: '8px 4px', borderRadius: '8px', fontSize: '15px', cursor: 'pointer', transition: 'all 0.12s', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' },
   input: {
     padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px',
     fontSize: '15px', color: '#111827', outline: 'none',
@@ -292,7 +336,15 @@ const styles = {
     border: '1.5px dashed #d1d5db', borderRadius: '10px',
     cursor: 'pointer', background: '#f9fafb',
   },
-  preview: { width: '100%', borderRadius: '10px', maxHeight: '150px', objectFit: 'cover' },
+  previewList: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' },
+  previewItem: { position: 'relative', borderRadius: '10px', overflow: 'hidden', background: '#f8fafc', border: '1px solid #e5e7eb' },
+  preview: { width: '100%', height: '102px', borderRadius: '10px', objectFit: 'cover', display: 'block' },
+  previewCount: {
+    position: 'absolute', left: '6px', top: '6px',
+    width: '20px', height: '20px', borderRadius: '50%',
+    background: 'rgba(15,23,42,0.68)', color: '#fff',
+    fontSize: '11px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
   removeImg: {
     position: 'absolute', top: '6px', right: '6px',
     background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff',
