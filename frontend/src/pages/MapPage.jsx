@@ -193,7 +193,7 @@ function MapPage() {
     onNewPin: (pin) => {
       setPins((prev) => {
         const reportId = getReportId(pin)
-        if (reportId && prev.some((item) => getReportId(item) === reportId)) return prev
+        if (reportId && prev.some((item) => String(getReportId(item)) === String(reportId))) return prev
         const next = [pin, ...prev]
         maybeAddDensityAlert(pin, next)
         return next
@@ -201,40 +201,58 @@ function MapPage() {
       setLastUpdated(new Date())
     },
     onSympathy: (data) => {
+      const resultId = data?.reportId ?? data?.id
+      const nextCount = Number(data?.count ?? data?.sympathyCount ?? 0)
+      if (resultId == null) return
+
       setPins((prev) => {
         const next = prev.map((p) =>
-          getReportId(p) === data.reportId
-            ? { ...p, sympathyCount: data.count }
+          String(getReportId(p)) === String(resultId)
+            ? { ...p, sympathyCount: nextCount }
             : p
         )
-        const matched = next.find((pin) => getReportId(pin) === data.reportId)
+        const matched = next.find((pin) => String(getReportId(pin)) === String(resultId))
         maybeAddDensityAlert(matched, next)
         return next
       })
+
+      setSelectedPin((prev) =>
+        prev && String(getReportId(prev)) === String(resultId)
+          ? { ...prev, sympathyCount: nextCount }
+          : prev
+      )
     },
     onAlert: addAlert,
   })
 
   const handlePinsUpdate = (result) => {
     const data = normalizeItem(result)
-    if (!data) return
+    const resultId = data?.reportId ?? data?.id
+    const nextCount = Number(data?.count ?? data?.sympathyCount ?? 0)
+    if (resultId == null) return
 
     setPins((prev) => {
       const next = prev.map((p) =>
-        getReportId(p) === data.reportId
-          ? { ...p, sympathyCount: data.count }
+        String(getReportId(p)) === String(resultId)
+          ? { ...p, sympathyCount: nextCount }
           : p
       )
-      const matched = next.find((pin) => getReportId(pin) === data.reportId)
+      const matched = next.find((pin) => String(getReportId(pin)) === String(resultId))
       maybeAddDensityAlert(matched, next)
       return next
     })
+
+    setSelectedPin((prev) =>
+      prev && String(getReportId(prev)) === String(resultId)
+        ? { ...prev, sympathyCount: nextCount }
+        : prev
+    )
   }
 
   const handleResolved = (reportId) => {
     setPins((prev) =>
       prev.map((p) =>
-        getReportId(p) === reportId
+        String(getReportId(p)) === String(reportId)
           ? { ...p, status: 'RESOLVED' }
           : p
       )
@@ -296,7 +314,7 @@ function MapPage() {
 
     setPins((prev) => {
       const reportId = getReportId(newPin)
-      if (reportId && prev.some((item) => getReportId(item) === reportId)) return prev
+      if (reportId && prev.some((item) => String(getReportId(item)) === String(reportId))) return prev
       const next = [newPin, ...prev]
       maybeAddDensityAlert(newPin, next)
       return next

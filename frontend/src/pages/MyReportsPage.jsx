@@ -199,7 +199,7 @@ function MyReportsPage() {
     try {
       await resolveReport(reportId, memberId)
       setReports((prev) => prev.map((report) => (
-        getReportId(report) === reportId ? { ...report, status: 'RESOLVED' } : report
+        String(getReportId(report)) === String(reportId) ? { ...report, status: 'RESOLVED' } : report
       )))
     } catch (error) {
       console.error('제보 해결 처리 실패:', error)
@@ -289,9 +289,9 @@ function MyReportsPage() {
               className="reports-resolve-btn"
               type="button"
               onClick={() => handleResolve(reportId)}
-              disabled={resolving === reportId}
+              disabled={String(resolving) === String(reportId)}
             >
-              {resolving === reportId ? '처리 중...' : <><SmallCheck /> 해결 완료</>}
+              {String(resolving) === String(reportId) ? '처리 중...' : <><SmallCheck /> 해결 완료</>}
             </button>
           ) : (
             <span className="reports-done-mark"><SmallCheck /> 처리 완료</span>

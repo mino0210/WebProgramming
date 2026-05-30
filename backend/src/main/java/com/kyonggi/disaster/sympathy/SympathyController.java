@@ -17,4 +17,10 @@ public class SympathyController {
             @PathVariable Long reportId, @RequestParam Long memberId) {
         return ResponseEntity.ok(ApiResponse.success(sympathyService.toggle(reportId, memberId)));
     }
+
+    @GetMapping("/{reportId}/sympathy")
+    public ResponseEntity<ApiResponse<SympathyResponse>> status(
+            @PathVariable Long reportId, @RequestParam Long memberId) {
+        return ResponseEntity.ok(ApiResponse.success(sympathyService.getStatus(reportId, memberId)));
+    }
 }

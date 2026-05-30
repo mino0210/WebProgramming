@@ -31,16 +31,19 @@ public class SympathyService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> CustomException.notFound("회원을 찾을 수 없습니다."));
 
+        boolean active;
         if (sympathyRepository.existsByReportIdAndMemberId(reportId, memberId)) {
             sympathyRepository.deleteByReportIdAndMemberId(reportId, memberId);
+            active = false;
         } else {
             sympathyRepository.save(
                     Sympathy.builder().report(report).member(member).build());
+            active = true;
         }
 
         int     count          = sympathyRepository.countByReportId(reportId);
         boolean alertTriggered = count >= alertThreshold;
-        SympathyResponse response = new SympathyResponse(reportId, count, alertTriggered);
+        SympathyResponse response = new SympathyResponse(reportId, count, active, alertTriggered);
 
         // ★ 공감 수 실시간 브로드캐스트
         messagingTemplate.convertAndSend("/topic/sympathy", response);
@@ -51,5 +54,17 @@ public class SympathyService {
         }
 
         return response;
+    }
+
+    public SympathyResponse getStatus(Long reportId, Long memberId) {
+        reportRepository.findById(reportId)
+                .orElseThrow(() -> CustomException.notFound("제보를 찾을 수 없습니다."));
+        memberRepository.findById(memberId)
+                .orElseThrow(() -> CustomException.notFound("회원을 찾을 수 없습니다."));
+
+        int count = sympathyRepository.countByReportId(reportId);
+        boolean active = sympathyRepository.existsByReportIdAndMemberId(reportId, memberId);
+        boolean alertTriggered = count >= alertThreshold;
+        return new SympathyResponse(reportId, count, active, alertTriggered);
     }
 }

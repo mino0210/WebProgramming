@@ -8,5 +8,6 @@ import lombok.Getter;
 public class SympathyResponse {
     private final Long    reportId;
     private final int     count;
+    private final boolean active;
     private final boolean alertTriggered;
 }

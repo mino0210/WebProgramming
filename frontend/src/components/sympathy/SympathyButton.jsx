@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { toggleSympathy } from '../../api/sympathyApi'
+import { getSympathyStatus, toggleSympathy } from '../../api/sympathyApi'
 
 function normalizeApiData(response) {
   return response?.data?.data ?? response?.data ?? response
+}
+
+const toNumberOrNull = (value) => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
 }
 
 function SympathyButton({ reportId, memberId, count = 0, onChanged }) {
@@ -16,8 +21,48 @@ function SympathyButton({ reportId, memberId, count = 0, onChanged }) {
   }, [count])
 
   useEffect(() => {
-    setActive(localStorage.getItem(storageKey) === 'true')
-  }, [storageKey])
+    let ignore = false
+
+    const cachedActive = localStorage.getItem(storageKey) === 'true'
+    setActive(cachedActive)
+
+    if (!reportId || !memberId) return undefined
+
+    getSympathyStatus(reportId, memberId)
+      .then((response) => {
+        if (ignore) return
+        const data = normalizeApiData(response) || {}
+        const serverCount = toNumberOrNull(data.count ?? data.sympathyCount)
+        const serverActive = Boolean(data.active ?? data.sympathized ?? data.liked ?? cachedActive)
+
+        if (serverCount != null) setLocalCount(serverCount)
+        setActive(serverActive)
+        localStorage.setItem(storageKey, String(serverActive))
+      })
+      .catch((error) => {
+        // 상태 조회 실패 시에도 버튼 자체는 기존 count/localStorage 기준으로 동작하게 둡니다.
+        console.warn('[SympathyButton] 공감 상태 조회 실패:', error?.message || error)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [reportId, memberId, storageKey])
+
+  const emitChanged = (payload) => {
+    const normalizedReportId = payload.reportId ?? payload.id ?? reportId
+    const normalizedCount = Number(payload.count ?? payload.sympathyCount ?? localCount) || 0
+    const normalizedActive = Boolean(payload.active ?? payload.sympathized ?? payload.liked ?? active)
+
+    onChanged?.({
+      ...payload,
+      reportId: normalizedReportId,
+      id: normalizedReportId,
+      count: normalizedCount,
+      sympathyCount: normalizedCount,
+      active: normalizedActive,
+    })
+  }
 
   const handleClick = async (event) => {
     event?.stopPropagation?.()
@@ -25,24 +70,38 @@ function SympathyButton({ reportId, memberId, count = 0, onChanged }) {
     if (!memberId) return alert('로그인 후 이용할 수 있습니다.')
     if (loading) return
 
+    const beforeCount = Number(localCount) || 0
+    const optimisticActive = !active
+    const optimisticCount = Math.max(0, beforeCount + (optimisticActive ? 1 : -1))
+
+    setLoading(true)
+    setActive(optimisticActive)
+    setLocalCount(optimisticCount)
+    localStorage.setItem(storageKey, String(optimisticActive))
+    emitChanged({ reportId, count: optimisticCount, active: optimisticActive })
+
     try {
-      setLoading(true)
-      const beforeCount = Number(localCount) || 0
       const result = normalizeApiData(await toggleSympathy(reportId, memberId)) || {}
-      const nextCount = Number(result.count ?? result.sympathyCount ?? beforeCount)
-      const nextActive = result.active ?? result.sympathized ?? result.liked ?? (nextCount > beforeCount ? true : nextCount < beforeCount ? false : !active)
+      const serverCount = toNumberOrNull(result.count ?? result.sympathyCount)
+      const nextCount = serverCount != null ? serverCount : optimisticCount
+      const nextActive = Boolean(result.active ?? result.sympathized ?? result.liked ?? optimisticActive)
       const normalized = {
         ...result,
-        reportId: result.reportId ?? reportId,
+        reportId: result.reportId ?? result.id ?? reportId,
         count: nextCount,
+        sympathyCount: nextCount,
         active: nextActive,
       }
 
       setLocalCount(nextCount)
-      setActive(Boolean(nextActive))
-      localStorage.setItem(storageKey, String(Boolean(nextActive)))
-      onChanged?.(normalized)
+      setActive(nextActive)
+      localStorage.setItem(storageKey, String(nextActive))
+      emitChanged(normalized)
     } catch (error) {
+      setLocalCount(beforeCount)
+      setActive(!optimisticActive)
+      localStorage.setItem(storageKey, String(!optimisticActive))
+      emitChanged({ reportId, count: beforeCount, active: !optimisticActive })
       console.error('[SympathyButton] 공감 처리 실패:', error)
       alert(error.message || '공감 처리 중 오류가 발생했습니다.')
     } finally {

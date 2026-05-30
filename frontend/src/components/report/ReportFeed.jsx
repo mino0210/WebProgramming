@@ -153,13 +153,26 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
   }
 
   const handleSympathyChanged = (result) => {
-    onPinsUpdate?.(result)
-    if (!result?.reportId) return
-    setSelected((prev) =>
-      prev && getReportId(prev) === result.reportId
-        ? { ...prev, sympathyCount: result.count }
-        : prev
-    )
+    const resultId = result?.reportId ?? result?.id
+    const nextCount = Number(result?.count ?? result?.sympathyCount ?? 0)
+    if (resultId == null) return
+
+    const normalized = {
+      ...result,
+      reportId: resultId,
+      id: resultId,
+      count: nextCount,
+      sympathyCount: nextCount,
+    }
+
+    onPinsUpdate?.(normalized)
+
+    setSelected((prev) => {
+      if (!prev || String(getReportId(prev)) !== String(resultId)) return prev
+      const updated = { ...prev, sympathyCount: nextCount }
+      onPinSelect?.(updated)
+      return updated
+    })
   }
 
   const handleShare = async () => {
@@ -325,7 +338,7 @@ function ReportFeed({ pins = [], selectedPin, onPinSelect, onPinsUpdate, onResol
           ) : (
             pins.map((report) => {
               const reportId = getReportId(report)
-              const isSelected = getReportId(selectedDetail) === reportId
+              const isSelected = String(getReportId(selectedDetail)) === String(reportId)
               return (
                 <div
                   key={reportId}
